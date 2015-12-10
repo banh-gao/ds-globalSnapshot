@@ -1,25 +1,33 @@
 package it.unitn.ds.net;
 
+import java.net.InetSocketAddress;
+import java.util.Map;
 import java.util.Queue;
 
 public interface NetOverlay {
 
 	/**
-	 * Start the local server using the given branchId
+	 * Start the local server by using the given branchId and load all the other
+	 * branches addresses
 	 * 
-	 * @param localBranchId
+	 * @param localBranch
+	 *            the local branchId
+	 * @param branches
+	 *            A map that associates branches with their network addresses
+	 * @return true if the server has started, false otherwise
 	 */
-	void start(int localBranchId);
+	boolean start(int localBranch, Map<Integer, InetSocketAddress> branches);
 
 	/**
-	 * Send the given message to a remote branch
+	 * Send the given message to the specified remote branch
 	 * 
-	 * @return true if the message is successfully acknowledged
+	 * @return true if the message was successfully delivered, false otherwise
 	 */
-	boolean sendMessage(Message m);
+	boolean sendMessage(int remoteBranch, Message m);
 
 	/**
-	 * @return The queue where the incoming messages are enqueued
+	 * @return The queue where the incoming messages are enqueued, ordered by
+	 *         reception time
 	 */
 	Queue<? extends Message> getIncomingQueue();
 
@@ -44,8 +52,15 @@ public interface NetOverlay {
 	 */
 	class Transfer extends Message {
 
-		public Transfer(int senderId) {
+		private final long amount;
+
+		public Transfer(int senderId, long amount) {
 			super(senderId);
+			this.amount = amount;
+		}
+
+		public long getAmount() {
+			return amount;
 		}
 	}
 }
