@@ -3,48 +3,49 @@ package it.unitn.ds.net;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
-import io.netty.handler.codec.DecoderException;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import it.unitn.ds.net.LinkMessage.FramedAck;
-import it.unitn.ds.net.LinkMessage.FramedData;
-import it.unitn.ds.net.LinkMessage.Type;
+import it.unitn.ds.net.AckEncoder.MessageAck;
+import it.unitn.ds.net.NetOverlay.Message;
+import it.unitn.ds.net.NetOverlay.Transfer;
 import java.util.List;
 
 public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
+
+	private static final byte MSG_TRANFER = 0x1;
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, DatagramPacket datagram, List<Object> out) throws Exception {
 		ByteBuf in = datagram.content();
 		try {
-			Type type = Type.valueOf(in.readByte());
+			// Decode link layer header
+			int msgType = in.readByte();
+			int seqn = in.readInt();
+			int senderId = in.readInt();
 
-			if (type == null)
-				throw new DecoderException("Unknown frame type");
-
-			long sequence = in.readUnsignedInt();
-
-			LinkMessage msg = null;
-
-			switch (type) {
-				case DATA :
-					msg = decodeData(in, sequence);
+			switch (msgType) {
+				case DataEncoder.LNK_DATA :
+					out.add(decodeData(in, seqn, senderId));
 					break;
-				case ACK :
-					msg = decodeAck(in, sequence);
+				case AckEncoder.LNK_ACK :
+					out.add(new MessageAck(seqn, senderId));
 					break;
 			}
-			out.add(msg);
 		} finally {
 			in.clear();
 		}
 	}
 
-	public static FramedData decodeData(ByteBuf in, long sequence) {
-		return new FramedData(sequence, in.readBytes(AppCodec.MSG_LENGTH));
-	}
+	public static Message decodeData(ByteBuf in, int seqn, int senderId) throws Exception {
+		Message m = null;
+		if (in.readByte() == MSG_TRANFER)
+			m = new Transfer(in.readLong());
 
-	public static FramedAck decodeAck(ByteBuf in, long sequence) {
-		return new FramedAck(sequence);
-	}
+		if (m == null)
+			throw new Exception("Unknown message type");
 
+		m.seqn = seqn;
+		m.senderId = senderId;
+
+		return m;
+	}
 }

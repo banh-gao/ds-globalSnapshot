@@ -47,14 +47,16 @@ public interface NetOverlay {
 	 */
 	abstract class Message {
 
-		private final int senderId;
-
-		public Message(int senderId) {
-			this.senderId = senderId;
-		}
+		int seqn;
+		int senderId;
 
 		int getSenderId() {
 			return senderId;
+		}
+
+		@Override
+		public String toString() {
+			return "Message [seqn=" + seqn + ", senderId=" + senderId + "]";
 		}
 	}
 
@@ -65,13 +67,17 @@ public interface NetOverlay {
 
 		private final long amount;
 
-		public Transfer(int senderId, long amount) {
-			super(senderId);
+		public Transfer(long amount) {
 			this.amount = amount;
 		}
 
 		public long getAmount() {
 			return amount;
+		}
+
+		@Override
+		public String toString() {
+			return "Transfer [amount=" + amount + ", seqn=" + seqn + ", senderId=" + senderId + "]";
 		}
 	}
 }

@@ -3,6 +3,7 @@ package it.unitn.ds.net;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -10,9 +11,12 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import it.unitn.ds.net.AckEncoder.MessageAck;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * UDP based networking between overlay branches
@@ -28,7 +32,10 @@ public class UDPNetOverlay implements NetOverlay {
 	private final Bootstrap chBoot;
 
 	private int localBranch;
+
 	private Map<Integer, InetSocketAddress> branches;
+
+	private final BlockingQueue<Message> incomingQueue = new LinkedBlockingQueue<NetOverlay.Message>();
 
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
@@ -52,24 +59,47 @@ public class UDPNetOverlay implements NetOverlay {
 
 	@Override
 	public boolean sendMessage(int remoteBranch, Message m) throws InterruptedException {
+		m.senderId = localBranch;
+
 		// TODO Send udp message to remote branch
 		InetSocketAddress remoteAddr = branches.get(remoteBranch);
 		if (remoteAddr == null)
 			throw new IllegalArgumentException("Invalid branch ID");
 
 		Channel ch = chBoot.connect(remoteAddr).sync().channel();
-
 		ch.writeAndFlush(m);
 
 		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
 		return true;
-		// return linkHandler.waitForAck();
+		// TODO: wait for ack return linkHandler.waitForAck();
+	}
+
+	void messageReceived(Message newMessage) {
+		boolean accepted = false;
+		synchronized (incomingQueue) {
+			accepted = incomingQueue.offer(newMessage);
+		}
+		if (accepted)
+			sendAck(newMessage);
+	}
+
+	private void sendAck(Message msg) {
+		Bootstrap chBoot = new Bootstrap();
+		chBoot.group(workersGroup).channel(NioDatagramChannel.class).handler(new AckEncoder());
+
+		InetSocketAddress branchAddr = branches.get(msg.senderId);
+		chBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
+
+			@Override
+			public void operationComplete(ChannelFuture future) throws Exception {
+				future.channel().writeAndFlush(new MessageAck(msg.seqn, localBranch));
+			}
+		});
 	}
 
 	@Override
 	public Message receiveMessage() throws InterruptedException {
-		// TODO Auto-generated method stub
-		return null;
+		return incomingQueue.take();
 	}
 
 	@Sharable
@@ -78,20 +108,17 @@ public class UDPNetOverlay implements NetOverlay {
 		@Override
 		protected void initChannel(Channel ch) throws Exception {
 			ChannelPipeline pipeline = ch.pipeline();
-			// Decoder for incoming UDP packets
-			pipeline.addLast(new LinkEncoder());
+			// Decoder for incoming messages
+			pipeline.addLast(new LinkDecoder());
 
-			// Encoder for reliability layer
-			pipeline.addLast(new LinkEncoder());
+			// Encoder for outgoing data messages
+			pipeline.addLast(new DataEncoder());
 
-			// Link handler to manage link reliability
-			pipeline.addLast(new LinkHandler(localBranch));
-
-			// Codec for applicative message
-			pipeline.addLast(new AppCodec());
+			// Link layer handler to manage link reliability
+			pipeline.addLast(new LinkHandler());
 
 			// Dispatch incoming messages on the application message bus
-			pipeline.addLast(new MessageDispatcher());
+			pipeline.addLast(new AppMsgHandler(UDPNetOverlay.this));
 		}
 	}
 }

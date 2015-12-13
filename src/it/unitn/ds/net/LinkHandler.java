@@ -1,11 +1,12 @@
 package it.unitn.ds.net;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import it.unitn.ds.net.LinkMessage.FramedAck;
-import it.unitn.ds.net.LinkMessage.FramedData;
+import it.unitn.ds.net.AckEncoder.MessageAck;
+import it.unitn.ds.net.NetOverlay.Message;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -16,15 +17,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class LinkHandler extends ChannelDuplexHandler {
 
-	private final int localBranch;
-
 	private ChannelHandlerContext ctx;
 
 	private AtomicInteger nextSeq = new AtomicInteger(0);
 
-	public LinkHandler(int localBranch) {
-		this.localBranch = localBranch;
-	}
+	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
 
 	@Override
 	public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -42,59 +39,38 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	@Override
-	public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-		LinkMessage frame = (LinkMessage) msg;
-		switch (frame.getType()) {
-			case DATA :
-				handleData((FramedData) frame);
-				ctx.fireChannelRead(((FramedData) frame).getPayload());
-				break;
-			case ACK :
-			default :
-				assert false;
-				break;
+	public void channelRead(ChannelHandlerContext ctx, Object in) throws Exception {
+		if (in.getClass() == MessageAck.class) {
+			handleAck((MessageAck) in);
+			return;
+		}
+
+		Message msg = (Message) in;
+
+		// Send to upper layer only if never seen before
+		if (branchesSeqn.getOrDefault(msg.senderId, -1) < msg.seqn) {
+			branchesSeqn.put(msg.senderId, msg.seqn);
+			ctx.fireChannelRead(msg);
 		}
 	}
 
 	@Override
 	public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-		FramedData data = getDataFrame((ByteBuf) msg);
-
-		ctx.write(data, promise);
-
-		if (getLinkTimeout() > 0) {
-
-		}
-	}
-
-	private void handleData(FramedData data) {
-		// TODO
-		ctx.writeAndFlush(null);
-	}
-
-	private void handleAck(FramedAck ack) {
-		// TODO
-	}
-
-	/**
-	 * Called when the upper layer want to send a message on the link
-	 * 
-	 * @param payload
-	 * @return
-	 */
-	protected FramedData getDataFrame(ByteBuf payload) {
 		// Prevent overflow
 		while (nextSeq.get() == Integer.MAX_VALUE)
 			if (nextSeq.compareAndSet(Integer.MAX_VALUE, 0))
 				break;
 
-		int seq = nextSeq.getAndIncrement();
+		((Message) msg).seqn = nextSeq.getAndIncrement();
 
-		return new FramedData(seq, payload);
+		ctx.write(msg, promise);
+
+		// TODO: wait for ack
 	}
 
-	protected long getLinkTimeout() {
-		return 0;
+	private void handleAck(MessageAck ack) {
+		System.out.println(ack);
+		// TODO
 	}
 
 	public boolean waitForAck() {
