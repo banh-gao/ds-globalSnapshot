@@ -2,5 +2,6 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="libs/netty-all-4.0.33.Final.jar" sourcepath="/home/zdenial/.m2/repository/io/netty/netty-all/4.0.33.Final/netty-all-4.0.33.Final-sources.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

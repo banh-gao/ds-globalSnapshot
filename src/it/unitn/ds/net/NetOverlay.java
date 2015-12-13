@@ -1,35 +1,46 @@
 package it.unitn.ds.net;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
-import java.util.Queue;
 
+/**
+ * Provides the network overlay layer for the distributed banking system
+ * 
+ * @author Daniel Zozin
+ */
 public interface NetOverlay {
 
 	/**
 	 * Start the local server by using the given branchId and load all the other
-	 * branches addresses
+	 * branches addresses. The calling thread will be blocked until the
+	 * operation completes.
 	 * 
 	 * @param localBranch
 	 *            the local branchId
 	 * @param branches
 	 *            A map that associates branches with their network addresses
-	 * @return true if the server has started, false otherwise
+	 * @throws IOException
+	 *             if network initialization failed
+	 * @throws InterruptedException
 	 */
-	boolean start(int localBranch, Map<Integer, InetSocketAddress> branches);
+	void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException;
 
 	/**
-	 * Send the given message to the specified remote branch
+	 * Send the given message to the specified remote branch. The calling thread
+	 * will be blocked until the operation completes.
 	 * 
 	 * @return true if the message was successfully delivered, false otherwise
+	 * @throws InterruptedException
 	 */
-	boolean sendMessage(int remoteBranch, Message m);
+	boolean sendMessage(int remoteBranch, Message m) throws InterruptedException;
 
 	/**
-	 * @return The queue where the incoming messages are enqueued, ordered by
-	 *         reception time
+	 * @return The next incoming message. The calling thread will be blocked
+	 *         until a new message arrives.
+	 * @throws InterruptedException
 	 */
-	Queue<? extends Message> getIncomingQueue();
+	Message receiveMessage() throws InterruptedException;
 
 	/**
 	 * Generic overlay message
