@@ -31,5 +31,21 @@ public class AckEncoder extends MessageToByteEncoder<MessageAck> {
 		public String toString() {
 			return "MessageAck [seqn=" + seqn + ", senderId=" + senderId + "]";
 		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			MessageAck other = (MessageAck) obj;
+			if (senderId != other.senderId)
+				return false;
+			if (seqn != other.seqn)
+				return false;
+			return true;
+		}
 	}
 }

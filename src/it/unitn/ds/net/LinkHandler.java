@@ -19,9 +19,11 @@ public class LinkHandler extends ChannelDuplexHandler {
 
 	private ChannelHandlerContext ctx;
 
-	private AtomicInteger nextSeq = new AtomicInteger(0);
-
+	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
+
+	MessageAck pendingAck;
+	private int lastDelivered;
 
 	@Override
 	public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -36,6 +38,19 @@ public class LinkHandler extends ChannelDuplexHandler {
 	@Override
 	public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
 
+	}
+
+	@Override
+	public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+		// Prevent overflow
+		while (nextSeq.get() == Integer.MAX_VALUE)
+			if (nextSeq.compareAndSet(Integer.MAX_VALUE, 0))
+				break;
+
+		((Message) msg).seqn = nextSeq.getAndIncrement();
+		pendingAck = new MessageAck(((Message) msg).seqn, ((Message) msg).senderId);
+
+		ctx.write(msg, promise);
 	}
 
 	@Override
@@ -54,27 +69,25 @@ public class LinkHandler extends ChannelDuplexHandler {
 		}
 	}
 
-	@Override
-	public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-		// Prevent overflow
-		while (nextSeq.get() == Integer.MAX_VALUE)
-			if (nextSeq.compareAndSet(Integer.MAX_VALUE, 0))
-				break;
-
-		((Message) msg).seqn = nextSeq.getAndIncrement();
-
-		ctx.write(msg, promise);
-
-		// TODO: wait for ack
-	}
-
 	private void handleAck(MessageAck ack) {
 		System.out.println(ack);
-		// TODO
+		if (ack.equals(pendingAck))
+			synchronized (pendingAck) {
+				pendingAck.notifyAll();
+			}
 	}
 
-	public boolean waitForAck() {
-		// TODO Auto-generated method stub
-		return false;
+	public boolean waitForAck(int pendingSeqn, int timeout) throws InterruptedException {
+		if (pendingAck == null)
+			return false;
+
+		if (pendingAck.seqn > pendingSeqn)
+			return true;
+
+		synchronized (pendingAck) {
+			pendingAck.wait(timeout);
+		}
+
+		return (lastDelivered == pendingSeqn);
 	}
 }

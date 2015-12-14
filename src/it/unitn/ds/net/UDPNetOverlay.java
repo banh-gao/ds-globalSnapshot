@@ -15,8 +15,9 @@ import it.unitn.ds.net.AckEncoder.MessageAck;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * UDP based networking between overlay branches
@@ -27,7 +28,17 @@ public class UDPNetOverlay implements NetOverlay {
 
 	private static final int POOL_SIZE = 1;
 
-	private final EventLoopGroup workersGroup = new NioEventLoopGroup(POOL_SIZE);
+	private static final int ACK_TIMEOUT = 100;
+
+	private final EventLoopGroup workersGroup = new NioEventLoopGroup(POOL_SIZE, new ThreadFactory() {
+
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r);
+			t.setDaemon(true);
+			return t;
+		}
+	});
 
 	private final Bootstrap chBoot;
 
@@ -35,7 +46,7 @@ public class UDPNetOverlay implements NetOverlay {
 
 	private Map<Integer, InetSocketAddress> branches;
 
-	private final BlockingQueue<Message> incomingQueue = new LinkedBlockingQueue<NetOverlay.Message>();
+	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
 
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
@@ -67,18 +78,22 @@ public class UDPNetOverlay implements NetOverlay {
 			throw new IllegalArgumentException("Invalid branch ID");
 
 		Channel ch = chBoot.connect(remoteAddr).sync().channel();
-		ch.writeAndFlush(m);
+		// Write and wait until message is sent
+		ch.writeAndFlush(m).sync();
+
+		// At this point seqn was already set by link layer
+		int pendingSeqn = m.seqn;
 
 		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
-		return true;
-		// TODO: wait for ack return linkHandler.waitForAck();
+
+		System.out.println(linkHandler.pendingAck);
+
+		return linkHandler.waitForAck(pendingSeqn, ACK_TIMEOUT);
 	}
 
 	void messageReceived(Message newMessage) {
-		boolean accepted = false;
-		synchronized (incomingQueue) {
-			accepted = incomingQueue.offer(newMessage);
-		}
+		boolean accepted = incomingQueue.offer(newMessage);
+
 		if (accepted)
 			sendAck(newMessage);
 	}
@@ -99,7 +114,12 @@ public class UDPNetOverlay implements NetOverlay {
 
 	@Override
 	public Message receiveMessage() throws InterruptedException {
-		return incomingQueue.take();
+		Message msg = incomingQueue.poll();
+
+		while (msg == null)
+			msg = incomingQueue.poll();
+
+		return msg;
 	}
 
 	@Sharable
