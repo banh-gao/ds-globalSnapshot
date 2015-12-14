@@ -1,14 +1,61 @@
 package it.unitn.ds.net;
 
-import java.net.Inet4Address;
 import java.net.InetSocketAddress;
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Test {
 
+	static int N_BRANCHES = 100;
+
+	private static final ExecutorService exec = Executors.newFixedThreadPool(N_BRANCHES);
+
+	private static final Map<Integer, InetSocketAddress> branches = new HashMap<Integer, InetSocketAddress>(N_BRANCHES);
+
 	public static void main(String[] args) throws Exception {
-		NetOverlay ov = new UDPNetOverlay();
-		ov.start(1, Collections.singletonMap(1, new InetSocketAddress(Inet4Address.getByName("0.0.0.0"), 8888)));
-		System.out.println(ov.sendMessage(1, new NetOverlay.Transfer(123445)));
+
+		for (int i = 0; i < N_BRANCHES; i++) {
+			branches.put(i, new InetSocketAddress(2000 + i));
+		}
+
+		UDPNetOverlay[] ov = new UDPNetOverlay[N_BRANCHES];
+
+		for (int i = 0; i < N_BRANCHES; i++) {
+			ov[i] = new UDPNetOverlay();
+			ov[i].start(i, branches);
+		}
+
+		for (int i = 1; i < N_BRANCHES; i++) {
+			exec.execute(new Branch(ov[i]));
+		}
+
+		exec.shutdown();
+
+		for (int i = 1; i < N_BRANCHES; i++) {
+			System.out.println("RECEIVED " + ov[0].receiveMessage());
+		}
+
+		exec.awaitTermination(1, TimeUnit.MINUTES);
+	}
+
+	static class Branch implements Runnable {
+
+		UDPNetOverlay ov;
+
+		public Branch(UDPNetOverlay ov) {
+			this.ov = ov;
+		}
+
+		@Override
+		public void run() {
+			try {
+				ov.sendMessage(0, new NetOverlay.Transfer(100));
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 }

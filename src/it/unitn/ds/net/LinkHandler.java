@@ -1,6 +1,7 @@
 package it.unitn.ds.net;
 
 import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import it.unitn.ds.net.AckEncoder.MessageAck;
@@ -15,29 +16,25 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author Daniel Zozin
  *
  */
+@Sharable
 public class LinkHandler extends ChannelDuplexHandler {
-
-	private ChannelHandlerContext ctx;
 
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
 
-	MessageAck pendingAck;
+	private MessageAck pendingAck;
 	private int lastDelivered;
 
 	@Override
 	public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-		this.ctx = ctx;
 	}
 
 	@Override
 	public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-		this.ctx = null;
 	}
 
 	@Override
 	public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
-
 	}
 
 	@Override
@@ -48,8 +45,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 				break;
 
 		((Message) msg).seqn = nextSeq.getAndIncrement();
-		pendingAck = new MessageAck(((Message) msg).seqn, ((Message) msg).senderId);
-
+		pendingAck = new MessageAck(((Message) msg).seqn, ((Message) msg).destId);
 		ctx.write(msg, promise);
 	}
 
@@ -70,19 +66,18 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	private void handleAck(MessageAck ack) {
-		System.out.println(ack);
-		if (ack.equals(pendingAck))
+		if (ack.equals(pendingAck)) {
+			lastDelivered = pendingAck.seqn;
 			synchronized (pendingAck) {
 				pendingAck.notifyAll();
+				pendingAck = null;
 			}
+		}
 	}
 
 	public boolean waitForAck(int pendingSeqn, int timeout) throws InterruptedException {
 		if (pendingAck == null)
 			return false;
-
-		if (pendingAck.seqn > pendingSeqn)
-			return true;
 
 		synchronized (pendingAck) {
 			pendingAck.wait(timeout);

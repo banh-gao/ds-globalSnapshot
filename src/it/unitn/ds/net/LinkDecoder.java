@@ -1,6 +1,7 @@
 package it.unitn.ds.net;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
@@ -9,6 +10,7 @@ import it.unitn.ds.net.NetOverlay.Message;
 import it.unitn.ds.net.NetOverlay.Transfer;
 import java.util.List;
 
+@Sharable
 public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
 
 	private static final byte MSG_TRANFER = 0x1;

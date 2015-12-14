@@ -1,6 +1,7 @@
 package it.unitn.ds.net;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 import it.unitn.ds.net.NetOverlay.Message;
@@ -9,7 +10,7 @@ import it.unitn.ds.net.NetOverlay.Transfer;
 /**
  * Codec for RELOAD frame messages exchanged on a link to a neighbor node
  */
-
+@Sharable
 class DataEncoder extends MessageToByteEncoder<Message> {
 
 	// Link level message types

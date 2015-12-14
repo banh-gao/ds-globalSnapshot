@@ -30,7 +30,8 @@ public interface NetOverlay {
 	 * Send the given message to the specified remote branch. The calling thread
 	 * will be blocked until the operation completes.
 	 * 
-	 * @return true if the message was successfully delivered, false otherwise
+	 * @return true if the message was successfully accepted by the remote
+	 *         branch, false otherwise
 	 * @throws InterruptedException
 	 */
 	boolean sendMessage(int remoteBranch, Message m) throws InterruptedException;
@@ -49,6 +50,7 @@ public interface NetOverlay {
 
 		int seqn;
 		int senderId;
+		int destId;
 
 		int getSenderId() {
 			return senderId;

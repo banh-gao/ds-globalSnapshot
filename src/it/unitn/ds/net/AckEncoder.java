@@ -1,10 +1,12 @@
 package it.unitn.ds.net;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 import it.unitn.ds.net.AckEncoder.MessageAck;
 
+@Sharable
 public class AckEncoder extends MessageToByteEncoder<MessageAck> {
 
 	public static final byte LNK_ACK = 0x2;

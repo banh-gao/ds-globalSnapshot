@@ -26,9 +26,11 @@ import java.util.concurrent.ThreadFactory;
  */
 public class UDPNetOverlay implements NetOverlay {
 
+	// Size of thread pool to handle in/out messages
 	private static final int POOL_SIZE = 1;
 
-	private static final int ACK_TIMEOUT = 100;
+	// Acknowledgement timeout in ms
+	private static final int ACK_TIMEOUT = 50;
 
 	private final EventLoopGroup workersGroup = new NioEventLoopGroup(POOL_SIZE, new ThreadFactory() {
 
@@ -40,17 +42,18 @@ public class UDPNetOverlay implements NetOverlay {
 		}
 	});
 
+	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
+	private final StackInitializer stack = new StackInitializer();
+	private final AckEncoder ackEnc = new AckEncoder();
+
 	private final Bootstrap chBoot;
 
-	private int localBranch;
-
-	private Map<Integer, InetSocketAddress> branches;
-
-	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
+	int localBranch;
+	Map<Integer, InetSocketAddress> branches;
 
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
-		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
+		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(stack);
 	}
 
 	@Override
@@ -71,6 +74,7 @@ public class UDPNetOverlay implements NetOverlay {
 	@Override
 	public boolean sendMessage(int remoteBranch, Message m) throws InterruptedException {
 		m.senderId = localBranch;
+		m.destId = remoteBranch;
 
 		// TODO Send udp message to remote branch
 		InetSocketAddress remoteAddr = branches.get(remoteBranch);
@@ -86,21 +90,19 @@ public class UDPNetOverlay implements NetOverlay {
 
 		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
 
-		System.out.println(linkHandler.pendingAck);
-
 		return linkHandler.waitForAck(pendingSeqn, ACK_TIMEOUT);
 	}
 
 	void messageReceived(Message newMessage) {
 		boolean accepted = incomingQueue.offer(newMessage);
-
+		// Message acknowledged only if accepted by local queue
 		if (accepted)
 			sendAck(newMessage);
 	}
 
 	private void sendAck(Message msg) {
 		Bootstrap chBoot = new Bootstrap();
-		chBoot.group(workersGroup).channel(NioDatagramChannel.class).handler(new AckEncoder());
+		chBoot.group(workersGroup).channel(NioDatagramChannel.class).handler(ackEnc);
 
 		InetSocketAddress branchAddr = branches.get(msg.senderId);
 		chBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
@@ -116,6 +118,7 @@ public class UDPNetOverlay implements NetOverlay {
 	public Message receiveMessage() throws InterruptedException {
 		Message msg = incomingQueue.poll();
 
+		// FIXME: avoid busy waiting
 		while (msg == null)
 			msg = incomingQueue.poll();
 
@@ -125,20 +128,25 @@ public class UDPNetOverlay implements NetOverlay {
 	@Sharable
 	class StackInitializer extends ChannelInitializer<Channel> {
 
+		LinkDecoder dec = new LinkDecoder();
+		DataEncoder enc = new DataEncoder();
+		LinkHandler lnk = new LinkHandler();
+		AppMsgHandler app = new AppMsgHandler(UDPNetOverlay.this);
+
 		@Override
 		protected void initChannel(Channel ch) throws Exception {
 			ChannelPipeline pipeline = ch.pipeline();
 			// Decoder for incoming messages
-			pipeline.addLast(new LinkDecoder());
+			pipeline.addLast(dec);
 
 			// Encoder for outgoing data messages
-			pipeline.addLast(new DataEncoder());
+			pipeline.addLast(enc);
 
 			// Link layer handler to manage link reliability
-			pipeline.addLast(new LinkHandler());
+			pipeline.addLast(lnk);
 
 			// Dispatch incoming messages on the application message bus
-			pipeline.addLast(new AppMsgHandler(UDPNetOverlay.this));
+			pipeline.addLast(app);
 		}
 	}
 }
