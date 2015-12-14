@@ -10,6 +10,11 @@ import it.unitn.ds.net.NetOverlay.Message;
 import it.unitn.ds.net.NetOverlay.Transfer;
 import java.util.List;
 
+/**
+ * Decode all incoming messages
+ * 
+ * @author Daniel Zozin
+ */
 @Sharable
 public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
 

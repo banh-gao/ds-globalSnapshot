@@ -8,7 +8,9 @@ import it.unitn.ds.net.NetOverlay.Message;
 import it.unitn.ds.net.NetOverlay.Transfer;
 
 /**
- * Codec for RELOAD frame messages exchanged on a link to a neighbor node
+ * Encode data messages
+ * 
+ * @author Daniel Zozin
  */
 @Sharable
 class DataEncoder extends MessageToByteEncoder<Message> {

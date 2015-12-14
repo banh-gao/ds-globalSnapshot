@@ -6,9 +6,9 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import it.unitn.ds.net.NetOverlay.Message;
 
 /**
- * Dispatch incoming messages to a proper handler in a separate thread.
- * The handler is chosen among the registered components ones based on the
- * RELOAD message content type.
+ * Pass incoming app messages to the application
+ * 
+ * @author Daniel Zozin
  */
 @Sharable
 public class AppMsgHandler extends ChannelInboundHandlerAdapter {

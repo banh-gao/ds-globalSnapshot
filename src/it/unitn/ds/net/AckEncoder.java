@@ -6,6 +6,11 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 import it.unitn.ds.net.AckEncoder.MessageAck;
 
+/**
+ * Encode ack messages
+ * 
+ * @author Daniel Zozin
+ */
 @Sharable
 public class AckEncoder extends MessageToByteEncoder<MessageAck> {
 
