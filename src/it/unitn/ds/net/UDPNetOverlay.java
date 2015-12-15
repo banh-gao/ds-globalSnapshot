@@ -3,7 +3,6 @@ package it.unitn.ds.net;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -11,7 +10,6 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
-import it.unitn.ds.net.AckEncoder.MessageAck;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
@@ -36,15 +34,13 @@ public class UDPNetOverlay implements NetOverlay {
 
 		@Override
 		public Thread newThread(Runnable r) {
-			Thread t = new Thread(r);
+			Thread t = new Thread(r, "Net Worker");
 			t.setDaemon(true);
 			return t;
 		}
 	});
 
 	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
-	private final StackInitializer stack = new StackInitializer();
-	private final AckEncoder ackEnc = new AckEncoder();
 
 	private final Bootstrap chBoot;
 
@@ -53,13 +49,14 @@ public class UDPNetOverlay implements NetOverlay {
 
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
-		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(stack);
 	}
 
 	@Override
 	public void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException {
 		this.localBranch = localBranch;
 		this.branches = branches;
+
+		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
 
 		InetSocketAddress localAddr = branches.get(localBranch);
 		if (localAddr == null)
@@ -81,51 +78,39 @@ public class UDPNetOverlay implements NetOverlay {
 		if (remoteAddr == null)
 			throw new IllegalArgumentException("Invalid branch ID");
 
+		sendUDPMessage(remoteAddr, m);
+
+		return true;
+	}
+
+	private void sendUDPMessage(InetSocketAddress remoteAddr, Message m) throws InterruptedException {
 		Channel ch = chBoot.connect(remoteAddr).sync().channel();
 		// Write and wait until message is sent
 		ch.writeAndFlush(m).sync();
 
-		// At this point seqn was already set by link layer
-		int pendingSeqn = m.seqn;
-
 		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
 
-		return linkHandler.waitForAck(pendingSeqn, ACK_TIMEOUT);
+		// Keeps sending until ack is received
+		while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT))
+			ch.writeAndFlush(m).sync();
 	}
 
 	void messageReceived(Message newMessage) {
-		boolean accepted = incomingQueue.offer(newMessage);
-		// Message acknowledged only if accepted by local queue
-		if (accepted)
-			sendAck(newMessage);
-	}
-
-	private void sendAck(Message msg) {
-		Bootstrap chBoot = new Bootstrap();
-		chBoot.group(workersGroup).channel(NioDatagramChannel.class).handler(ackEnc);
-
-		InetSocketAddress branchAddr = branches.get(msg.senderId);
-		chBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
-
-			@Override
-			public void operationComplete(ChannelFuture future) throws Exception {
-				future.channel().writeAndFlush(new MessageAck(msg.seqn, localBranch));
-			}
-		});
+		incomingQueue.add(newMessage);
 	}
 
 	@Override
-	public Message receiveMessage() throws InterruptedException {
+	public Message receiveMessage() {
 		return incomingQueue.poll();
 	}
 
 	@Sharable
 	class StackInitializer extends ChannelInitializer<Channel> {
 
-		LinkDecoder dec = new LinkDecoder();
-		DataEncoder enc = new DataEncoder();
-		LinkHandler lnk = new LinkHandler();
-		AppMsgHandler app = new AppMsgHandler(UDPNetOverlay.this);
+		private final LinkDecoder dec = new LinkDecoder();
+		private final DataEncoder enc = new DataEncoder();
+		private final LinkHandler lnk = new LinkHandler(localBranch, branches);
+		private final AppMsgHandler app = new AppMsgHandler(UDPNetOverlay.this);
 
 		@Override
 		protected void initChannel(Channel ch) throws Exception {
