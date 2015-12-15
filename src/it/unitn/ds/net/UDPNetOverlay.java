@@ -116,13 +116,7 @@ public class UDPNetOverlay implements NetOverlay {
 
 	@Override
 	public Message receiveMessage() throws InterruptedException {
-		Message msg = incomingQueue.poll();
-
-		// FIXME: avoid busy waiting
-		while (msg == null)
-			msg = incomingQueue.poll();
-
-		return msg;
+		return incomingQueue.poll();
 	}
 
 	@Sharable

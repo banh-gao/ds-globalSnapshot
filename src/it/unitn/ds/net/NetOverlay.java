@@ -37,11 +37,9 @@ public interface NetOverlay {
 	boolean sendMessage(int remoteBranch, Message m) throws InterruptedException;
 
 	/**
-	 * @return The next incoming message. The calling thread will be blocked
-	 *         until a new message arrives.
-	 * @throws InterruptedException
+	 * @return The next incoming message, if any. Null if there is no message.
 	 */
-	Message receiveMessage() throws InterruptedException;
+	Message receiveMessage();
 
 	/**
 	 * Generic overlay message
