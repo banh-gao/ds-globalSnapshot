@@ -1,5 +1,6 @@
 package it.unitn.ds.net;
 
+import it.unitn.ds.net.NetOverlay.Message;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,7 +36,11 @@ public class Test {
 		exec.shutdown();
 
 		for (int i = 1; i < N_BRANCHES; i++) {
-			System.out.println("RECEIVED " + ov[0].receiveMessage());
+			Message m = ov[0].receiveMessage();
+			while (m == null)
+				m = ov[0].receiveMessage();
+
+			System.out.println("RECEIVED " + m);
 		}
 
 		exec.awaitTermination(1, TimeUnit.MINUTES);

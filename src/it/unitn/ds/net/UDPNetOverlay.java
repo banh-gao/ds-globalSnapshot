@@ -28,7 +28,7 @@ public class UDPNetOverlay implements NetOverlay {
 	private static final int POOL_SIZE = 1;
 
 	// Acknowledgement timeout in ms
-	private static final int ACK_TIMEOUT = 50;
+	private static final int ACK_TIMEOUT = 1000;
 
 	private final EventLoopGroup workersGroup = new NioEventLoopGroup(POOL_SIZE, new ThreadFactory() {
 
@@ -108,7 +108,7 @@ public class UDPNetOverlay implements NetOverlay {
 	class StackInitializer extends ChannelInitializer<Channel> {
 
 		private final LinkDecoder dec = new LinkDecoder();
-		private final DataEncoder enc = new DataEncoder();
+		private final LinkDataEncoder enc = new LinkDataEncoder();
 		private final LinkHandler lnk = new LinkHandler(localBranch, branches);
 		private final AppMsgHandler app = new AppMsgHandler(UDPNetOverlay.this);
 

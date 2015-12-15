@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-import it.unitn.ds.net.AckEncoder.MessageAck;
+import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 
 /**
  * Encode ack messages
@@ -12,7 +12,7 @@ import it.unitn.ds.net.AckEncoder.MessageAck;
  * @author Daniel Zozin
  */
 @Sharable
-public class AckEncoder extends MessageToByteEncoder<MessageAck> {
+public class LinkAckEncoder extends MessageToByteEncoder<MessageAck> {
 
 	public static final byte LNK_ACK = 0x2;
 

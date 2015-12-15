@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import it.unitn.ds.net.AckEncoder.MessageAck;
+import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 import it.unitn.ds.net.NetOverlay.Message;
 import it.unitn.ds.net.NetOverlay.Transfer;
 import java.util.List;
@@ -30,10 +30,10 @@ public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
 			int senderId = in.readInt();
 
 			switch (msgType) {
-				case DataEncoder.LNK_DATA :
+				case LinkDataEncoder.LNK_DATA :
 					out.add(decodeData(in, seqn, senderId));
 					break;
-				case AckEncoder.LNK_ACK :
+				case LinkAckEncoder.LNK_ACK :
 					out.add(new MessageAck(seqn, senderId));
 					break;
 			}

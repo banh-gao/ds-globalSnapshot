@@ -13,7 +13,7 @@ import it.unitn.ds.net.NetOverlay.Transfer;
  * @author Daniel Zozin
  */
 @Sharable
-class DataEncoder extends MessageToByteEncoder<Message> {
+class LinkDataEncoder extends MessageToByteEncoder<Message> {
 
 	// Link level message types
 	public static final byte LNK_DATA = 0x1;

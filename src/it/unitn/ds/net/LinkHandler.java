@@ -8,9 +8,10 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.nio.NioDatagramChannel;
-import it.unitn.ds.net.AckEncoder.MessageAck;
+import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 import it.unitn.ds.net.NetOverlay.Message;
 import java.net.InetSocketAddress;
+import java.net.PortUnreachableException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,11 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Sharable
 public class LinkHandler extends ChannelDuplexHandler {
 
-	private final AckEncoder ackEnc = new AckEncoder();
+	private final Bootstrap ackBoot = new Bootstrap();
 	private final int localBranch;
 	private final Map<Integer, InetSocketAddress> branches;
-
-	private ChannelHandlerContext ctx;
 
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
@@ -39,19 +38,13 @@ public class LinkHandler extends ChannelDuplexHandler {
 	public LinkHandler(int localBranch, Map<Integer, InetSocketAddress> branches) {
 		this.localBranch = localBranch;
 		this.branches = branches;
+		ackBoot.channel(NioDatagramChannel.class).handler(new LinkAckEncoder());
 	}
 
 	@Override
-	public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-		this.ctx = ctx;
-	}
-
-	@Override
-	public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-	}
-
-	@Override
-	public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
+	public void channelActive(ChannelHandlerContext ctx) throws Exception {
+		// Send ACK messages using the channel event loop
+		ackBoot.group(ctx.channel().eventLoop());
 	}
 
 	@Override
@@ -60,7 +53,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 			((Message) msg).seqn = nextSeq();
 
 		pendingAck = new MessageAck(((Message) msg).seqn, ((Message) msg).destId);
-		ctx.write(msg, promise);
+		super.write(ctx, msg, promise);
 	}
 
 	private int nextSeq() {
@@ -91,14 +84,18 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	private void sendAck(Message msg) {
-		Bootstrap chBoot = new Bootstrap();
-		chBoot.group(ctx.channel().eventLoop()).channel(NioDatagramChannel.class).handler(ackEnc);
 		InetSocketAddress branchAddr = branches.get(msg.senderId);
-		chBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
+		ackBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
 
 			@Override
 			public void operationComplete(ChannelFuture future) throws Exception {
-				future.channel().writeAndFlush(new MessageAck(msg.seqn, localBranch));
+				future.channel().writeAndFlush(new MessageAck(msg.seqn, localBranch)).addListener(new ChannelFutureListener() {
+
+					@Override
+					public void operationComplete(ChannelFuture future) throws Exception {
+						future.channel().close();
+					}
+				});
 			}
 		});
 	}
@@ -122,5 +119,12 @@ public class LinkHandler extends ChannelDuplexHandler {
 		}
 
 		return (lastDelivered == pendingSeqn);
+	}
+
+	@Override
+	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+		if (cause.getClass() == PortUnreachableException.class) {
+			System.err.println("Destination port unreachable");
+		}
 	}
 }
