@@ -39,7 +39,7 @@ public class Test {
 
 		for (int i = 0; i < N_BRANCHES; i++) {
 			ov[i] = new UDPNetOverlay();
-			ov[i].start(i, branches, BRANCH_POOL);
+			ov[i].start(i, branches);
 		}
 
 		for (int i = 1; i < N_BRANCHES; i++) {

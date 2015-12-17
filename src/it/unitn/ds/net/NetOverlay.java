@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 /**
  * Provides the network overlay layer for the distributed banking system
@@ -22,14 +21,11 @@ public interface NetOverlay {
 	 *            the local branchId
 	 * @param branches
 	 *            A map that associates branches with their network addresses
-	 * @param exec
-	 *            The executor to be used to process incoming messages and
-	 *            completion of message sending operations
 	 * @throws IOException
 	 *             if network initialization failed
 	 * @throws InterruptedException
 	 */
-	void start(int localBranch, Map<Integer, InetSocketAddress> branches, Executor exec) throws IOException, InterruptedException;
+	void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException;
 
 	/**
 	 * Send the given message to the specified remote branch. The message will
@@ -84,5 +80,27 @@ public interface NetOverlay {
 		public String toString() {
 			return "Transfer [amount=" + amount + ", seqn=" + seqn + ", senderId=" + senderId + "]";
 		}
+	}
+
+	/**
+	 * Snapshot token message
+	 */
+	class Token extends Message {
+
+		private final long snapshotId;
+
+		public Token(long snapshotId) {
+			this.snapshotId = snapshotId;
+		}
+
+		public long getSnapshotId() {
+			return snapshotId;
+		}
+
+		@Override
+		public String toString() {
+			return "Token [snapshotId=" + snapshotId + ", seqn=" + seqn + ", senderId=" + senderId + ", destId=" + destId + "]";
+		}
+
 	}
 }

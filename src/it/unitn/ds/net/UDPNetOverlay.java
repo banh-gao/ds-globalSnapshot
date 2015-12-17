@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
 /**
@@ -49,17 +48,14 @@ public class UDPNetOverlay implements NetOverlay {
 	int localBranch;
 	Map<Integer, InetSocketAddress> branches;
 
-	private Executor exec;
-
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
 	}
 
 	@Override
-	public void start(int localBranch, Map<Integer, InetSocketAddress> branches, Executor exec) throws IOException, InterruptedException {
+	public void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException {
 		this.localBranch = localBranch;
 		this.branches = branches;
-		this.exec = exec;
 
 		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
 
@@ -96,6 +92,8 @@ public class UDPNetOverlay implements NetOverlay {
 				while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT))
 					ch.writeAndFlush(m).sync();
 
+				ch.close();
+
 				return m;
 
 			} catch (InterruptedException e) {
@@ -104,7 +102,7 @@ public class UDPNetOverlay implements NetOverlay {
 				return null;
 			}
 
-		}, exec);
+		});
 
 		return f;
 	}
@@ -118,7 +116,7 @@ public class UDPNetOverlay implements NetOverlay {
 	public CompletableFuture<Message> receiveMessage() {
 		return CompletableFuture.supplyAsync(() -> {
 			return incomingQueue.poll();
-		}, exec);
+		});
 	}
 
 	@Sharable
