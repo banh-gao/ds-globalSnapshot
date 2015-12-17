@@ -3,7 +3,6 @@ package it.unitn.ds.net;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Provides the network overlay layer for the distributed banking system
@@ -28,19 +27,16 @@ public interface NetOverlay {
 	void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException;
 
 	/**
-	 * Send the given message to the specified remote branch. The message will
-	 * be queued and sent the returned future is completed once the message is
-	 * successfully delivered
+	 * Send the given message to the specified remote branch.
 	 * 
-	 * @return The future used to indicate the completion of the delivery
+	 * @throws InterruptedException
 	 */
-	CompletableFuture<Message> sendMessage(int remoteBranch, Message m);
+	void sendMessage(int remoteBranch, Message m);
 
 	/**
-	 * @return A future that supplies the next incoming message, or null if
-	 *         there is no message
+	 * @return The next incoming message, if any. Null if there is no message.
 	 */
-	CompletableFuture<Message> receiveMessage();
+	Message receiveMessage();
 
 	/**
 	 * Generic overlay message

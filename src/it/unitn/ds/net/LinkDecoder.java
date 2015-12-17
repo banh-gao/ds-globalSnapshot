@@ -7,6 +7,7 @@ import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 import it.unitn.ds.net.NetOverlay.Message;
+import it.unitn.ds.net.NetOverlay.Token;
 import it.unitn.ds.net.NetOverlay.Transfer;
 import java.util.List;
 
@@ -17,8 +18,6 @@ import java.util.List;
  */
 @Sharable
 public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
-
-	private static final byte MSG_TRANFER = 0x1;
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, DatagramPacket datagram, List<Object> out) throws Exception {
@@ -44,8 +43,10 @@ public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
 
 	public static Message decodeData(ByteBuf in, int seqn, int senderId) throws Exception {
 		Message m = null;
-		if (in.readByte() == MSG_TRANFER)
+		if (in.readByte() == LinkDataEncoder.APP_MONEY_TRANSFER)
 			m = new Transfer(in.readLong());
+		else if (in.readByte() == LinkDataEncoder.APP_TOKEN)
+			m = new Token(in.readLong());
 
 		if (m == null)
 			throw new Exception("Unknown message type");

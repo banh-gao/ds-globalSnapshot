@@ -102,9 +102,8 @@ public class LinkHandler extends ChannelDuplexHandler {
 
 	private void handleAck(MessageAck ack) {
 		if (ack.equals(pendingAck)) {
-
+			lastDelivered = pendingAck.seqn;
 			synchronized (pendingAck) {
-				lastDelivered = pendingAck.seqn;
 				pendingAck.notifyAll();
 			}
 		}
@@ -115,13 +114,10 @@ public class LinkHandler extends ChannelDuplexHandler {
 			return false;
 
 		synchronized (pendingAck) {
-			if (pendingSeqn < lastDelivered)
-				pendingAck.wait(timeout);
-			else
-				return true;
+			pendingAck.wait(timeout);
 		}
 
-		return (lastDelivered >= pendingSeqn);
+		return (lastDelivered == pendingSeqn);
 	}
 
 	@Override
