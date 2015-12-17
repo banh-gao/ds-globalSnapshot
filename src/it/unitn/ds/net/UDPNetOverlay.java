@@ -14,7 +14,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
 /**
@@ -41,6 +44,17 @@ public class UDPNetOverlay implements NetOverlay {
 	});
 
 	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
+
+	// Only single thread used to send outgoing messages
+	private final ExecutorService outgoingExec = Executors.newSingleThreadExecutor(new ThreadFactory() {
+
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "Outgoing Worker");
+			t.setDaemon(true);
+			return t;
+		}
+	});
 
 	private final Bootstrap chBoot;
 
@@ -69,30 +83,37 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	@Override
-	public boolean sendMessage(int remoteBranch, Message m) throws InterruptedException {
+	public CompletableFuture<Message> sendMessage(int remoteBranch, Message m) {
 		m.senderId = localBranch;
 		m.destId = remoteBranch;
 
-		// TODO Send udp message to remote branch
-		InetSocketAddress remoteAddr = branches.get(remoteBranch);
-		if (remoteAddr == null)
-			throw new IllegalArgumentException("Invalid branch ID");
+		// Schedule to the outgoing executor the message to be delivered
+		final CompletableFuture<Message> f = CompletableFuture.supplyAsync(() -> {
+			InetSocketAddress remoteAddr = branches.get(m.destId);
+			if (remoteAddr == null)
+				throw new IllegalArgumentException("Invalid branch ID");
 
-		sendUDPMessage(remoteAddr, m);
+			try {
+				Channel ch = chBoot.connect(remoteAddr).sync().channel();
 
-		return true;
-	}
+				// Write and wait until message is sent
+				ch.writeAndFlush(m);
 
-	private void sendUDPMessage(InetSocketAddress remoteAddr, Message m) throws InterruptedException {
-		Channel ch = chBoot.connect(remoteAddr).sync().channel();
-		// Write and wait until message is sent
-		ch.writeAndFlush(m).sync();
+				LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
 
-		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
+				// Keeps sending until ack is received
+				while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT)) {
+					ch.writeAndFlush(m);
+				}
 
-		// Keeps sending until ack is received
-		while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT))
-			ch.writeAndFlush(m).sync();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+			return m;
+		}, outgoingExec);
+
+		return f;
 	}
 
 	void messageReceived(Message newMessage) {

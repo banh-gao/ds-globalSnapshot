@@ -1,18 +1,18 @@
 package it.unitn.ds.net;
 
 import it.unitn.ds.net.NetOverlay.Message;
+import it.unitn.ds.net.NetOverlay.Transfer;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 public class Test {
 
 	static int N_BRANCHES = 100;
 
-	private static final ExecutorService exec = Executors.newFixedThreadPool(N_BRANCHES);
+	static long balance;
 
 	private static final Map<Integer, InetSocketAddress> branches = new HashMap<Integer, InetSocketAddress>(N_BRANCHES);
 
@@ -30,10 +30,10 @@ public class Test {
 		}
 
 		for (int i = 1; i < N_BRANCHES; i++) {
-			exec.execute(new Branch(ov[i]));
+			CompletableFuture<Message> o = ov[i].sendMessage(0, new NetOverlay.Transfer(100));
+			CompletableFuture<Long> transfer = o.thenApply(reduceBalance);
+			System.out.println("NEW BALANCE: " + transfer.get());
 		}
-
-		exec.shutdown();
 
 		for (int i = 1; i < N_BRANCHES; i++) {
 			Message m = ov[0].receiveMessage();
@@ -42,25 +42,10 @@ public class Test {
 
 			System.out.println("RECEIVED " + m);
 		}
-
-		exec.awaitTermination(1, TimeUnit.MINUTES);
 	}
 
-	static class Branch implements Runnable {
-
-		UDPNetOverlay ov;
-
-		public Branch(UDPNetOverlay ov) {
-			this.ov = ov;
-		}
-
-		@Override
-		public void run() {
-			try {
-				ov.sendMessage(0, new NetOverlay.Transfer(100));
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-	}
+	static Function<Message, Long> reduceBalance = (Message m) -> {
+		long newBalance = Test.balance - ((Transfer) m).getAmount();
+		return newBalance;
+	};
 }
