@@ -102,7 +102,6 @@ public class LinkHandler extends ChannelDuplexHandler {
 
 	private void handleAck(MessageAck ack) {
 		if (ack.equals(pendingAck)) {
-
 			synchronized (pendingAck) {
 				lastDelivered = pendingAck.seqn;
 				pendingAck.notifyAll();

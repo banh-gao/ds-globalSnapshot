@@ -16,8 +16,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
 /**
@@ -45,30 +44,22 @@ public class UDPNetOverlay implements NetOverlay {
 
 	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
 
-	// Only single thread used to send outgoing messages
-	private final ExecutorService outgoingExec = Executors.newSingleThreadExecutor(new ThreadFactory() {
-
-		@Override
-		public Thread newThread(Runnable r) {
-			Thread t = new Thread(r, "Outgoing Worker");
-			t.setDaemon(true);
-			return t;
-		}
-	});
-
 	private final Bootstrap chBoot;
 
 	int localBranch;
 	Map<Integer, InetSocketAddress> branches;
+
+	private Executor exec;
 
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
 	}
 
 	@Override
-	public void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException {
+	public void start(int localBranch, Map<Integer, InetSocketAddress> branches, Executor exec) throws IOException, InterruptedException {
 		this.localBranch = localBranch;
 		this.branches = branches;
+		this.exec = exec;
 
 		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
 
@@ -96,33 +87,38 @@ public class UDPNetOverlay implements NetOverlay {
 			try {
 				Channel ch = chBoot.connect(remoteAddr).sync().channel();
 
-				// Write and wait until message is sent
-				ch.writeAndFlush(m);
+				// Write and wait until message is sent before waiting for ack
+				ch.writeAndFlush(m).sync();
 
 				LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
 
 				// Keeps sending until ack is received
-				while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT)) {
-					ch.writeAndFlush(m);
-				}
+				while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT))
+					ch.writeAndFlush(m).sync();
+
+				return m;
 
 			} catch (InterruptedException e) {
 				e.printStackTrace();
+				// Not used since thread was interrupted
+				return null;
 			}
 
-			return m;
-		}, outgoingExec);
+		}, exec);
 
 		return f;
 	}
 
 	void messageReceived(Message newMessage) {
-		incomingQueue.add(newMessage);
+		if (!incomingQueue.add(newMessage))
+			System.err.println("Incoming queue full: Message dropped");
 	}
 
 	@Override
-	public Message receiveMessage() {
-		return incomingQueue.poll();
+	public CompletableFuture<Message> receiveMessage() {
+		return CompletableFuture.supplyAsync(() -> {
+			return incomingQueue.poll();
+		}, exec);
 	}
 
 	@Sharable
