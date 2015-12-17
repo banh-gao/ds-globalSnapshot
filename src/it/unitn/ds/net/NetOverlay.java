@@ -3,6 +3,7 @@ package it.unitn.ds.net;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Provides the network overlay layer for the distributed banking system
@@ -29,9 +30,11 @@ public interface NetOverlay {
 	/**
 	 * Send the given message to the specified remote branch.
 	 * 
+	 * @return
+	 * 
 	 * @throws InterruptedException
 	 */
-	void sendMessage(int remoteBranch, Message m);
+	CompletableFuture<Message> sendMessage(int remoteBranch, Message m);
 
 	/**
 	 * @return The next incoming message, if any. Null if there is no message.
@@ -60,7 +63,7 @@ public interface NetOverlay {
 	/**
 	 * Money transfer message
 	 */
-	class Transfer extends Message {
+	public class Transfer extends Message {
 
 		private final long amount;
 
@@ -81,7 +84,7 @@ public interface NetOverlay {
 	/**
 	 * Snapshot token message
 	 */
-	class Token extends Message {
+	public class Token extends Message {
 
 		private final long snapshotId;
 

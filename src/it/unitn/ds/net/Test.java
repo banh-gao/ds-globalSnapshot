@@ -4,6 +4,7 @@ import it.unitn.ds.net.NetOverlay.Message;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +56,12 @@ public class Test {
 
 		@Override
 		public void run() {
-			ov.sendMessage(0, new NetOverlay.Transfer(100));
+			try {
+				ov.sendMessage(0, new NetOverlay.Transfer(100)).get();
+			} catch (InterruptedException | ExecutionException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 	}
 }

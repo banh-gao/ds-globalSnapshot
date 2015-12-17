@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -83,9 +84,11 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	@Override
-	public void sendMessage(int remoteBranch, Message m) {
+	public CompletableFuture<Message> sendMessage(int remoteBranch, Message m) {
 		m.senderId = localBranch;
 		m.destId = remoteBranch;
+
+		CompletableFuture<Message> f = new CompletableFuture<Message>();
 
 		senderThreads.execute(new Runnable() {
 
@@ -96,16 +99,17 @@ public class UDPNetOverlay implements NetOverlay {
 					throw new IllegalArgumentException("Invalid branch ID");
 
 				try {
-					sendUDPMessage(remoteAddr, m);
+					sendUDPMessage(remoteAddr, m, f);
 				} catch (InterruptedException e) {
 					// Can never happen
 					e.printStackTrace();
 				}
 			}
 		});
+		return f;
 	}
 
-	private void sendUDPMessage(InetSocketAddress remoteAddr, Message m) throws InterruptedException {
+	private void sendUDPMessage(InetSocketAddress remoteAddr, Message m, CompletableFuture<Message> f) throws InterruptedException {
 		Channel ch = chBoot.connect(remoteAddr).sync().channel();
 		// Write and wait until message is sent
 		ch.writeAndFlush(m).sync();
@@ -117,6 +121,7 @@ public class UDPNetOverlay implements NetOverlay {
 			ch.writeAndFlush(m).sync();
 
 		ch.close();
+		f.complete(m);
 	}
 
 	void messageReceived(Message newMessage) {
