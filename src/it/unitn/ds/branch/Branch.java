@@ -13,15 +13,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 public class Branch {
 
 	private static final int MAX_TRANSFER = 100;
 
-	private final ExecutorService BRANCH_THREADS = Executors.newSingleThreadExecutor(new ThreadFactory() {
+	// Delay between two subsequent branch loops (in ms)
+	private static final int LOOP_DELAY = 1000;
+
+	private final ScheduledExecutorService BRANCH_THREADS = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
 		@Override
 		public Thread newThread(Runnable r) {
@@ -36,12 +40,11 @@ public class Branch {
 
 	private final NetOverlay overlay;
 
-	private long balance;
-	private boolean stop = false;
-
 	private List<Integer> randBranches;
 	private int nextBranch = 0;
 	private Random rand = new Random();
+
+	private long balance;
 
 	public Branch(int localId, Map<Integer, InetSocketAddress> branches, long initialBalance) {
 		this.localId = localId;
@@ -58,42 +61,27 @@ public class Branch {
 
 	public void start() throws IOException, InterruptedException {
 		overlay.start(localId, branches);
-		startExecutionLoop();
+		BRANCH_THREADS.scheduleWithFixedDelay(BRANCH_LOOP, 0, LOOP_DELAY, TimeUnit.MILLISECONDS);
 	}
 
-	private void startExecutionLoop() {
-		BRANCH_THREADS.execute(new Runnable() {
+	// Task to be periodically executed by the branch
+	Runnable BRANCH_LOOP = new Runnable() {
 
-			@Override
-			public void run() {
-				while (stop == false) {
-					try {
-						Message m = overlay.receiveMessage();
-						if (m != null)
-							processMessage(m);
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
+		@Override
+		public void run() {
+			// Process incoming message only if present
+			Message m = overlay.receiveMessage();
+			if (m != null)
+				processMessage(m);
 
-					// FIXME: balance reduction not executed by executor
-					// Once the transfer is completed the local balance is
-					// reduced by the same thread executor
-					sendRandomTransfer().thenAcceptAsync((m) -> {
-						System.out.println("COMPLETE");
-						balance -= ((Transfer) m).getAmount();
-					}, BRANCH_THREADS);
-
-					try {
-						Thread.sleep(200);
-					} catch (InterruptedException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
-					}
-					System.out.println("CURRENT BALANCE in " + localId + ": " + balance);
-				}
-			}
-		});
-	}
+			// Transfer random money to random branch
+			// Once the transfer is completed the local balance is
+			// reduced (by the same thread executor)
+			sendRandomTransfer().thenAcceptAsync((t) -> {
+				balance -= ((Transfer) t).getAmount();
+			}, BRANCH_THREADS);
+		}
+	};
 
 	private void processMessage(Message m) {
 		if (m instanceof Transfer)
@@ -133,6 +121,6 @@ public class Branch {
 	}
 
 	public void stop() {
-		stop = true;
+		BRANCH_THREADS.shutdown();
 	}
 }

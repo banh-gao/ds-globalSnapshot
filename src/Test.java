@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class Test {
 
-	static int N_BRANCHES = 2;
+	static int N_BRANCHES = 5;
 
 	static long balance = 1000;
 
