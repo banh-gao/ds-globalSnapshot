@@ -8,10 +8,13 @@ import it.unitn.ds.net.UDPNetOverlay;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -23,7 +26,7 @@ public class Branch {
 	private static final int MAX_TRANSFER = 100;
 
 	// Delay between two subsequent branch loops (in ms)
-	private static final int LOOP_DELAY = 1000;
+	private static final int LOOP_DELAY = 200;
 
 	private final ScheduledExecutorService BRANCH_THREADS = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
@@ -40,6 +43,8 @@ public class Branch {
 
 	private final NetOverlay overlay;
 
+	private final SnapshotHelper snapshot;
+
 	private List<Integer> randBranches;
 	private int nextBranch = 0;
 	private Random rand = new Random();
@@ -51,6 +56,7 @@ public class Branch {
 		this.branches = branches;
 
 		overlay = new UDPNetOverlay();
+		snapshot = new SnapshotHelper(branches.size(), localId);
 
 		this.balance = initialBalance;
 
@@ -79,6 +85,8 @@ public class Branch {
 			// reduced (by the same thread executor)
 			sendRandomTransfer().thenAcceptAsync((t) -> {
 				balance -= ((Transfer) t).getAmount();
+				// FIXME: consider case for consecutive transfer requests
+				// without confirmation
 			}, BRANCH_THREADS);
 		}
 	};
@@ -91,14 +99,42 @@ public class Branch {
 	}
 
 	private void processTransfer(Transfer m) {
+		// If snapshot is active the transfer may be counted
+		snapshot.newTransferReceived(m.getSenderId(), m.getAmount());
+
 		// Increase balance
-		balance += ((Transfer) m).getAmount();
+		balance += m.getAmount();
 		// TODO Auto-generated method stub
 
 	}
 
 	private void processToken(Token m) {
-		// TODO Auto-generated method stub
+		boolean isNewSnapshot = snapshot.newTokenReceived(m.getSenderId(), m.getSnapshotId(), balance);
+
+		if (!isNewSnapshot)
+			return;
+
+		// Broadcasts tokens to all branches except the sender and itself
+		broadcastTokens(m.getSnapshotId(), localId);
+	}
+
+	public void startSnapshot(int snapshotId) {
+		BRANCH_THREADS.execute(new Runnable() {
+
+			@Override
+			public void run() {
+				broadcastTokens(snapshotId);
+			}
+		});
+	}
+
+	private void broadcastTokens(long snapshotId, Integer... excludedBranches) {
+		Set<Integer> destBranches = new HashSet<Integer>(branches.keySet());
+
+		destBranches.removeAll(Arrays.asList(excludedBranches));
+
+		for (int branch : destBranches)
+			overlay.sendMessage(branch, new Token(snapshotId));
 	}
 
 	private CompletableFuture<Message> sendRandomTransfer() {

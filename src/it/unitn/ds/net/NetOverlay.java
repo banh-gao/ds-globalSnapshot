@@ -30,7 +30,8 @@ public interface NetOverlay {
 	/**
 	 * Send the given message to the specified remote branch.
 	 * 
-	 * @return
+	 * @return A completable future that is aynchronously set as completed when
+	 *         the message is successfully delivered.
 	 * 
 	 * @throws InterruptedException
 	 */
@@ -50,7 +51,7 @@ public interface NetOverlay {
 		int senderId;
 		int destId;
 
-		int getSenderId() {
+		public int getSenderId() {
 			return senderId;
 		}
 

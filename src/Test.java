@@ -24,6 +24,10 @@ public class Test {
 			ov[i].start();
 		}
 
+		Thread.sleep(500);
+
+		ov[1].startSnapshot(4);
+
 		while (true);
 	}
 }

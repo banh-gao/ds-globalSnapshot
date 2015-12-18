@@ -74,6 +74,8 @@ public class LinkHandler extends ChannelDuplexHandler {
 
 		Message msg = (Message) in;
 
+		msg.destId = localBranch;
+
 		sendAck(msg);
 
 		// Send to upper layer only if never seen before

@@ -45,6 +45,9 @@ public class UDPNetOverlay implements NetOverlay {
 
 	// Threads used to send messages to remote branches and wait for
 	// acknowledgment
+	// The sender is a single thread that is blocks until an acknowledgment is
+	// received. At that point it notifies the original sender thread and
+	// finally starts processing the next send request.
 	private final ExecutorService senderThreads = Executors.newSingleThreadExecutor(new ThreadFactory() {
 
 		@Override

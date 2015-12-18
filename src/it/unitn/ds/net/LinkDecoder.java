@@ -43,9 +43,10 @@ public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {
 
 	public static Message decodeData(ByteBuf in, int seqn, int senderId) throws Exception {
 		Message m = null;
-		if (in.readByte() == LinkDataEncoder.APP_MONEY_TRANSFER)
+		byte type = in.readByte();
+		if (type == LinkDataEncoder.APP_MONEY_TRANSFER)
 			m = new Transfer(in.readLong());
-		else if (in.readByte() == LinkDataEncoder.APP_TOKEN)
+		else if (type == LinkDataEncoder.APP_TOKEN)
 			m = new Token(in.readLong());
 
 		if (m == null)
