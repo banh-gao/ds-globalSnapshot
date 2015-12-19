@@ -93,20 +93,16 @@ public class UDPNetOverlay implements NetOverlay {
 
 		CompletableFuture<Message> f = new CompletableFuture<Message>();
 
-		senderThreads.execute(new Runnable() {
+		senderThreads.execute(() -> {
+			InetSocketAddress remoteAddr = branches.get(remoteBranch);
+			if (remoteAddr == null)
+				throw new IllegalArgumentException("Invalid branch ID");
 
-			@Override
-			public void run() {
-				InetSocketAddress remoteAddr = branches.get(remoteBranch);
-				if (remoteAddr == null)
-					throw new IllegalArgumentException("Invalid branch ID");
-
-				try {
-					sendUDPMessage(remoteAddr, m, f);
-				} catch (InterruptedException e) {
-					// Can never happen
-					e.printStackTrace();
-				}
+			try {
+				sendUDPMessage(remoteAddr, m, f);
+			} catch (InterruptedException e) {
+				// Can never happen
+				e.printStackTrace();
 			}
 		});
 		return f;

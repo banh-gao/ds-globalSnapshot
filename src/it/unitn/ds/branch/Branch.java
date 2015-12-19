@@ -146,16 +146,15 @@ public class Branch {
 	}
 
 	public void startSnapshot(int snapshotId) {
-		BRANCH_THREADS.execute(new Runnable() {
+		BRANCH_THREADS.execute(() -> {
+			snapshot.startSnapshot(snapshotId, availableAmounts);
 
-			@Override
-			public void run() {
-				snapshot.startSnapshot(snapshotId, availableAmounts);
-				try {
-					broadcastTokens(snapshotId);
-				} catch (InterruptedException | ExecutionException e) {
-					e.printStackTrace();
-				}
+			// Send tokens to all other branches, no transfer occurs between
+			// saving the availableAmounts and broadcasting the tokens
+			try {
+				broadcastTokens(snapshotId);
+			} catch (InterruptedException | ExecutionException e) {
+				e.printStackTrace();
 			}
 		});
 	}
@@ -166,7 +165,7 @@ public class Branch {
 		destBranches.remove(localId);
 
 		for (int branch : destBranches) {
-			Token t = overlay.sendMessage(branch, new Token(snapshotId)).get();
+			overlay.sendMessage(branch, new Token(snapshotId));
 		}
 	}
 
