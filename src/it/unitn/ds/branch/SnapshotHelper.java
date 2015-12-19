@@ -3,7 +3,7 @@ package it.unitn.ds.branch;
 import java.util.HashSet;
 import java.util.Set;
 
-public class SnapshotHelper {
+class SnapshotHelper {
 
 	private final Set<Integer> receivedTokens;
 	private final int totalBranches;
@@ -77,12 +77,20 @@ public class SnapshotHelper {
 
 	private void stopSnapshot() {
 		isSnapshotMode = false;
-		System.out.println(String.format("Snap %d:%d | bal %d | inc %d | total %d", snapshotId, localBranchId, branchBalance, incomingTransfers, branchBalance + incomingTransfers));
+		GlobalSnapshotCollector.saveLocalSnapshot(snapshotId, localBranchId, branchBalance, incomingTransfers);
 
 		receivedTokens.clear();
 	}
 
 	public boolean isTokenArrived(int branch) {
 		return receivedTokens.contains(branch);
+	}
+
+	public boolean isActive() {
+		return isSnapshotMode;
+	}
+
+	public long getActiveId() {
+		return snapshotId;
 	}
 }

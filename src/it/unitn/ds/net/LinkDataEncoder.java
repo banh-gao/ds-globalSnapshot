@@ -10,8 +10,6 @@ import it.unitn.ds.net.NetOverlay.Transfer;
 
 /**
  * Encode data messages
- * 
- * @author Daniel Zozin
  */
 @Sharable
 class LinkDataEncoder extends MessageToByteEncoder<Message> {

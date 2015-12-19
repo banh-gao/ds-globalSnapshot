@@ -22,8 +22,6 @@ import java.util.concurrent.ThreadFactory;
 
 /**
  * UDP based networking between overlay branches
- * 
- * @author Daniel Zozin
  */
 public class UDPNetOverlay implements NetOverlay {
 
@@ -47,7 +45,10 @@ public class UDPNetOverlay implements NetOverlay {
 	// acknowledgment
 	// The sender is a single thread that is blocks until an acknowledgment is
 	// received. At that point it notifies the original sender thread and
-	// finally starts processing the next send request.
+	// finally starts processing the next send request. This guarantees that
+	// messages cannot be send in parallel (thus reducing overall performance
+	// but with
+	// simplified reliability management).
 	private final ExecutorService senderThreads = Executors.newSingleThreadExecutor(new ThreadFactory() {
 
 		@Override

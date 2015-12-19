@@ -13,8 +13,6 @@ import java.util.List;
 
 /**
  * Decode all incoming messages
- * 
- * @author Daniel Zozin
  */
 @Sharable
 public class LinkDecoder extends MessageToMessageDecoder<DatagramPacket> {

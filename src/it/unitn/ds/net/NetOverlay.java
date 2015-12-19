@@ -7,8 +7,6 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Provides the network overlay layer for the distributed banking system
- * 
- * @author Daniel Zozin
  */
 public interface NetOverlay {
 

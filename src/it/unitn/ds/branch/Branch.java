@@ -25,8 +25,8 @@ public class Branch {
 	// Maximum amount of money for a single transfer
 	private static final int MAX_TRANSFER = 100;
 
-	// Transmission rate of random data transfers (in ms)
-	private static final int TRANSFER_RATE = 500;
+	// Transmission rate for generation random money transfers (in ms)
+	private static final int TRANSFER_RATE = 200;
 
 	private final ScheduledExecutorService BRANCH_THREADS = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
@@ -49,9 +49,10 @@ public class Branch {
 	private int nextBranch = 0;
 	private Random rand = new Random();
 
+	// Money available (not reserved) that can be used for transfers
 	private long availableAmounts;
 
-	// Moneys reserved for pending outgoing transfers
+	// Money reserved for pending outgoing transfers
 	private long reservedAmounts = 0;
 
 	public Branch(int localId, Map<Integer, InetSocketAddress> branches, long initialBalance) {
@@ -142,7 +143,13 @@ public class Branch {
 
 	}
 
-	public void startSnapshot(int snapshotId) {
+	public boolean startSnapshot(int snapshotId) {
+		if (snapshot.isActive()) {
+			System.out.println("Skipped global snapshot " + snapshotId + " from branch " + localId + " (snapshot " + snapshot.getActiveId() + " still in progress)");
+			return false;
+		}
+
+		System.out.println("Starting global snapshot " + snapshotId + " from branch " + localId);
 		BRANCH_THREADS.execute(() -> {
 			snapshot.startSnapshot(snapshotId, availableAmounts);
 
@@ -154,6 +161,7 @@ public class Branch {
 				e.printStackTrace();
 			}
 		});
+		return true;
 	}
 
 	private void broadcastTokens(long snapshotId) throws InterruptedException, ExecutionException {
@@ -167,11 +175,18 @@ public class Branch {
 	}
 
 	/**
-	 * @return The current branch balance: available amounts + amounts reserved
-	 *         for a transfer
+	 * @return The total branch balance: available amounts + amounts reserved
+	 *         for transfers
 	 */
-	public long getCurrentBalance() {
+	public long getTotalBalance() {
 		return availableAmounts + reservedAmounts;
+	}
+
+	/**
+	 * @return The balance available to the branch
+	 */
+	public long getAvailableBalance() {
+		return availableAmounts;
 	}
 
 	public void stop() {

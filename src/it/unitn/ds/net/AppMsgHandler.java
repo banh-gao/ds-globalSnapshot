@@ -7,8 +7,6 @@ import it.unitn.ds.net.NetOverlay.Message;
 
 /**
  * Pass incoming app messages to the application
- * 
- * @author Daniel Zozin
  */
 @Sharable
 public class AppMsgHandler extends ChannelInboundHandlerAdapter {

@@ -18,8 +18,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Manage link layer reliability
- * 
- * @author Daniel Zozin
  *
  */
 @Sharable

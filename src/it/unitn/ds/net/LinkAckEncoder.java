@@ -8,8 +8,6 @@ import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 
 /**
  * Encode ack messages
- * 
- * @author Daniel Zozin
  */
 @Sharable
 public class LinkAckEncoder extends MessageToByteEncoder<MessageAck> {
