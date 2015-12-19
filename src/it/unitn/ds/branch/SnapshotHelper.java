@@ -29,28 +29,29 @@ public class SnapshotHelper {
 	 *         local node
 	 */
 	public boolean newTokenReceived(int branch, long snapshotId, long currentBalance) {
-		// If snapshot mode is not active, this token triggers a new snapshot
-		if (!isSnapshotMode) {
-			startSnapshot(snapshotId, currentBalance);
-			return true;
-		}
-
 		// Discard token not matching current snapshot id
 		if (isSnapshotMode && snapshotId != this.snapshotId) {
 			System.out.println("Token not matching active snapshot ID");
 			return false;
 		}
 
-		if (!receivedTokens.add(branch)) {
-			System.out.println("Token already received!");
-			return false;
+		boolean newSnapshotStarted = false;
+
+		// If snapshot mode is not active, this token triggers a new one
+		if (!isSnapshotMode) {
+			startSnapshot(snapshotId, currentBalance);
+			newSnapshotStarted = true;
 		}
 
-		// Token received from all branches
+		// Try to add a token
+		if (!receivedTokens.add(branch))
+			System.out.println("Token already received!");
+
+		// Token received from all branches, local snapshot is terminated
 		if (receivedTokens.size() == totalBranches)
 			stopSnapshot();
 
-		return false;
+		return newSnapshotStarted;
 	}
 
 	public void newTransferReceived(int branch, long amount) {
@@ -59,23 +60,26 @@ public class SnapshotHelper {
 
 		// If token was not received the transfer has to be counted in current
 		// snapshot
-		if (!receivedTokens.contains(branch))
+		if (!receivedTokens.contains(branch)) {
 			incomingTransfers += amount;
+		}
 	}
 
 	public void startSnapshot(long snapshotId, long currentBalance) {
 		isSnapshotMode = true;
 		this.snapshotId = snapshotId;
 		incomingTransfers = 0;
-		receivedTokens.clear();
 
+		// Save local snapshot status
 		branchBalance = currentBalance;
 		receivedTokens.add(localBranchId);
 	}
 
 	private void stopSnapshot() {
 		isSnapshotMode = false;
-		System.out.println(String.format("Branch: %d | Snapshot %d | balance: %d | incoming: %d", localBranchId, snapshotId, branchBalance, incomingTransfers));
+		System.out.println(String.format("Snap %d:%d | bal %d | inc %d | total %d", snapshotId, localBranchId, branchBalance, incomingTransfers, branchBalance + incomingTransfers));
+
+		receivedTokens.clear();
 	}
 
 	public boolean isTokenArrived(int branch) {

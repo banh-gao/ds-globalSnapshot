@@ -35,7 +35,7 @@ public interface NetOverlay {
 	 * 
 	 * @throws InterruptedException
 	 */
-	CompletableFuture<Message> sendMessage(int remoteBranch, Message m);
+	<T extends Message> CompletableFuture<T> sendMessage(int remoteBranch, T m);
 
 	/**
 	 * @return The next incoming message, if any. Null if there is no message.
