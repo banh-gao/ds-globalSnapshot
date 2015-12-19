@@ -40,12 +40,12 @@ public interface NetOverlay {
 	/**
 	 * @return The next incoming message, if any. Null if there is no message.
 	 */
-	Message receiveMessage();
+	CompletableFuture<Message> receiveMessage();
 
 	/**
 	 * Generic overlay message
 	 */
-	abstract class Message {
+	public abstract class Message {
 
 		int seqn;
 		int senderId;

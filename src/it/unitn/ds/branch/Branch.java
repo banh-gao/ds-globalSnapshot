@@ -25,9 +25,6 @@ public class Branch {
 	// Maximum amount of money for a single transfer
 	private static final int MAX_TRANSFER = 100;
 
-	// Processing rate for incoming messages (in ms)
-	private static final int PROCESS_RATE = 100;
-
 	// Transmission rate of random data transfers (in ms)
 	private static final int TRANSFER_RATE = 500;
 
@@ -74,22 +71,22 @@ public class Branch {
 	public void start() throws IOException, InterruptedException {
 		overlay.start(localId, branches);
 
-		// Process incoming message only if present
-		BRANCH_THREADS.scheduleWithFixedDelay(() -> processMessage(), 0, PROCESS_RATE, TimeUnit.MILLISECONDS);
+		// Triggers message processing once the first message arrives
+		overlay.receiveMessage().thenAcceptAsync((m) -> processMessage(m), BRANCH_THREADS);
 
-		// Send random money transfer with a fixed rate
+		// Schedule random sending of money transfers with a fixed rate
 		BRANCH_THREADS.scheduleWithFixedDelay(() -> sendRandomTransfer(), 0, TRANSFER_RATE, TimeUnit.MILLISECONDS);
 	}
 
-	private void processMessage() {
-		Message m = overlay.receiveMessage();
-		if (m == null)
-			return;
+	private void processMessage(Message m) {
 
 		if (m instanceof Transfer)
 			processTransfer((Transfer) m);
 		else
 			processToken((Token) m);
+
+		// Reschedule for receiving the next message
+		overlay.receiveMessage().thenAcceptAsync((msg) -> processMessage(msg), BRANCH_THREADS);
 	}
 
 	private void processTransfer(Transfer m) {

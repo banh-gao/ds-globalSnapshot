@@ -59,6 +59,7 @@ public class UDPNetOverlay implements NetOverlay {
 	});
 
 	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
+	private final Queue<CompletableFuture<Message>> cb = new ConcurrentLinkedDeque<CompletableFuture<Message>>();
 
 	private final Bootstrap chBoot;
 
@@ -124,12 +125,23 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	void messageReceived(Message newMessage) {
-		incomingQueue.add(newMessage);
+		CompletableFuture<Message> f = cb.poll();
+		if (f != null)
+			f.complete(newMessage);
+		else
+			incomingQueue.add(newMessage);
 	}
 
 	@Override
-	public Message receiveMessage() {
-		return incomingQueue.poll();
+	public CompletableFuture<Message> receiveMessage() {
+		Message m = incomingQueue.poll();
+		if (m != null)
+			return CompletableFuture.completedFuture(m);
+		else {
+			CompletableFuture<Message> f = new CompletableFuture<Message>();
+			cb.add(f);
+			return f;
+		}
 	}
 
 	@Sharable

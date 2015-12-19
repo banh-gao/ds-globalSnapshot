@@ -35,10 +35,7 @@ public class Test {
 		}
 
 		for (int i = 1; i < N_BRANCHES; i++) {
-			Message m = ov[0].receiveMessage();
-			while (m == null)
-				m = ov[0].receiveMessage();
-
+			Message m = ov[0].receiveMessage().get();
 			System.out.println("RECEIVED " + m);
 		}
 
