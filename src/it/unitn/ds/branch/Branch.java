@@ -73,10 +73,10 @@ public class Branch {
 		overlay.start(localId, branches);
 
 		// Triggers message processing once the first message arrives
-		overlay.receiveMessage().thenAcceptAsync((m) -> processMessage(m), BRANCH_THREADS);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREADS);
 
 		// Schedule random sending of money transfers with a fixed rate
-		BRANCH_THREADS.scheduleWithFixedDelay(() -> sendRandomTransfer(), 0, TRANSFER_RATE, TimeUnit.MILLISECONDS);
+		BRANCH_THREADS.scheduleWithFixedDelay(this::sendRandomTransfer, 0, TRANSFER_RATE, TimeUnit.MILLISECONDS);
 	}
 
 	private void processMessage(Message m) {
@@ -87,7 +87,7 @@ public class Branch {
 			processToken((Token) m);
 
 		// Reschedule for receiving the next message
-		overlay.receiveMessage().thenAcceptAsync((msg) -> processMessage(msg), BRANCH_THREADS);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREADS);
 	}
 
 	private void processTransfer(Transfer m) {
@@ -128,7 +128,7 @@ public class Branch {
 
 		// Once the transfer is completed the reserved amounts is reduced (by
 		// the same thread executor)
-		overlay.sendMessage(getRandomBranch(), new Transfer(amount)).thenAcceptAsync((t) -> {
+		overlay.sendMessage(getRandomBranch(), new Transfer(amount)).thenAcceptAsync(t -> {
 			reservedAmounts -= t.getAmount();
 		}, BRANCH_THREADS);
 	}
@@ -154,7 +154,7 @@ public class Branch {
 			snapshot.startSnapshot(snapshotId, availableAmounts);
 
 			// Send tokens to all other branches, no transfer occurs between
-			// saving the availableAmounts and broadcasting the tokens
+			// saving the availableAmounts and queuing tokens for broadcast
 			try {
 				broadcastTokens(snapshotId);
 			} catch (InterruptedException | ExecutionException e) {

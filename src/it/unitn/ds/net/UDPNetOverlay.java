@@ -118,7 +118,7 @@ public class UDPNetOverlay implements NetOverlay {
 		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
 
 		// Keeps sending until ack is received
-		while (!linkHandler.waitForAck(m.seqn, ACK_TIMEOUT))
+		while (!linkHandler.waitForAck(ACK_TIMEOUT))
 			ch.writeAndFlush(m).sync();
 
 		ch.close();

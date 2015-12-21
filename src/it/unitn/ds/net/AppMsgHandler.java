@@ -19,7 +19,9 @@ public class AppMsgHandler extends ChannelInboundHandlerAdapter {
 
 	@Override
 	public void channelRead(ChannelHandlerContext ctx, Object in) throws Exception {
-		no.messageReceived((Message) in);
+		synchronized (no) {
+			no.messageReceived((Message) in);
+		}
 	}
 
 	@Override

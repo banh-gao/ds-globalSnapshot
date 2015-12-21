@@ -30,6 +30,8 @@ public class LinkHandler extends ChannelDuplexHandler {
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
 
+	// Pending ack is assumed to be set for a serial transmission on the link
+	// (no parallel reliable data transmission)
 	private MessageAck pendingAck;
 	private int lastDelivered;
 
@@ -102,22 +104,32 @@ public class LinkHandler extends ChannelDuplexHandler {
 
 	private void handleAck(MessageAck ack) {
 		if (ack.equals(pendingAck)) {
-			lastDelivered = pendingAck.seqn;
 			synchronized (pendingAck) {
+				lastDelivered = pendingAck.seqn;
+				// Notifies ack waiters that ack arrives
 				pendingAck.notifyAll();
 			}
 		}
 	}
 
-	public boolean waitForAck(int pendingSeqn, int timeout) throws InterruptedException {
+	/**
+	 * Wait until the last sent message gets acknowledged or the request times
+	 * out.
+	 * 
+	 * @param timeout
+	 * @return True if ack was received, false if the request times out before
+	 *         receiving the ack
+	 * @throws InterruptedException
+	 */
+	public boolean waitForAck(int timeout) throws InterruptedException {
 		if (pendingAck == null)
 			return false;
 
+		// Wait until ack is received or request times out
 		synchronized (pendingAck) {
 			pendingAck.wait(timeout);
+			return (lastDelivered >= pendingAck.seqn);
 		}
-
-		return (lastDelivered == pendingSeqn);
 	}
 
 	@Override
