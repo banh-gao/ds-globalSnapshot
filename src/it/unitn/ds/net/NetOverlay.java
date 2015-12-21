@@ -1,6 +1,5 @@
 package it.unitn.ds.net;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -12,18 +11,15 @@ public interface NetOverlay {
 
 	/**
 	 * Start the local server by using the given branchId and load all the other
-	 * branches addresses. The calling thread will be blocked until the
-	 * operation completes.
+	 * branches addresses. The returned future is completed once the server is
+	 * started
 	 * 
 	 * @param localBranch
 	 *            the local branchId
 	 * @param branches
 	 *            A map that associates branches with their network addresses
-	 * @throws IOException
-	 *             if network initialization failed
-	 * @throws InterruptedException
 	 */
-	void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException;
+	CompletableFuture<Void> start(int localBranch, Map<Integer, InetSocketAddress> branches);
 
 	/**
 	 * Send the given message to the specified remote branch.

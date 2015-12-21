@@ -1,9 +1,11 @@
 package it.unitn.ds;
+
 import it.unitn.ds.branch.Branch;
 import it.unitn.ds.branch.GlobalSnapshotCollector;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 public class Test {
 
@@ -20,21 +22,28 @@ public class Test {
 			branches.put(i, new InetSocketAddress(2000 + i));
 		}
 
-		// Start all branches, they send random money transfers to each other
-		Branch[] b = new Branch[N_BRANCHES];
-		for (int i = 0; i < N_BRANCHES; i++) {
-			b[i] = new Branch(i, branches, balance);
-			b[i].start();
-		}
+		@SuppressWarnings("unchecked")
+		CompletableFuture<Branch>[] b = new CompletableFuture[N_BRANCHES];
 
-		// Periodically run the global snapshot algorithm
+		branches.keySet().forEach(branchId -> {
+			// Start all branches in parallel
+			b[branchId] = Branch.start(branchId, branches, balance);
+		});
+
+		// Wait until all branches are started
+		CompletableFuture.allOf(b).join();
+
+		// Keeps running the global snapshot algorithm
 		int snapshotId = 0;
 		while (true) {
 			GlobalSnapshotCollector.initSnapshot(N_BRANCHES);
-			b[0].startSnapshot(snapshotId);
+
+			// Always start snapshot from branch 0 (It can start everywhere but
+			// concurrent snapshots are not supported by branches)
+			b[0].get().startSnapshot(snapshotId);
 			snapshotId = (snapshotId + 1) % Integer.MAX_VALUE;
 
-			// Busy wait until the snapshot terminates
+			// Busy wait until the snapshot terminates globally
 			while (GlobalSnapshotCollector.isSnapshotActive())
 				Thread.sleep(1000);
 

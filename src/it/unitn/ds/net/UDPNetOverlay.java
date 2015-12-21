@@ -10,7 +10,6 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Queue;
@@ -72,9 +71,11 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	@Override
-	public void start(int localBranch, Map<Integer, InetSocketAddress> branches) throws IOException, InterruptedException {
+	public CompletableFuture<Void> start(int localBranch, Map<Integer, InetSocketAddress> branches) {
 		this.localBranch = localBranch;
 		this.branches = branches;
+
+		CompletableFuture<Void> startFut = new CompletableFuture<Void>();
 
 		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
 
@@ -82,10 +83,14 @@ public class UDPNetOverlay implements NetOverlay {
 		if (localAddr == null)
 			throw new IllegalArgumentException("Invalid local branch ID");
 
-		ChannelFuture serverChFut = chBoot.bind(localAddr).sync();
+		chBoot.bind(localAddr).addListener((ChannelFuture f) -> {
+			if (f.isSuccess())
+				startFut.complete(null);
+			else
+				startFut.completeExceptionally(f.cause());
+		});
 
-		if (!serverChFut.isSuccess())
-			throw new IOException(serverChFut.cause());
+		return startFut;
 	}
 
 	@Override
