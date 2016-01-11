@@ -5,11 +5,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-public class Test {
+class Test {
 
 	static int N_BRANCHES = 20;
-
-	static long initialBalance = 10000;
 
 	private static final Map<Integer, InetSocketAddress> branches = new HashMap<Integer, InetSocketAddress>(N_BRANCHES);
 
@@ -25,7 +23,7 @@ public class Test {
 
 		branches.keySet().forEach(branchId -> {
 			// Start all branches in parallel
-			b[branchId] = Branch.start(branchId, branches, initialBalance);
+			b[branchId] = Branch.start(branchId, branches);
 		});
 
 		// Wait until all branches are started
@@ -43,7 +41,7 @@ public class Test {
 			// Wait until the snapshot terminates globally
 			long globalBalance = GlobalSnapshotCollector.getGlobalBalance().get();
 
-			System.out.println("Snapshot " + snapshotId + " reports a global balance " + globalBalance + ", expected balance was " + N_BRANCHES * initialBalance);
+			System.out.println("Snapshot " + snapshotId + " reports a global balance " + globalBalance + ", expected balance was " + N_BRANCHES * Branch.INITIAL_BALANCE);
 
 			snapshotId = (snapshotId + 1) % Integer.MAX_VALUE;
 		}

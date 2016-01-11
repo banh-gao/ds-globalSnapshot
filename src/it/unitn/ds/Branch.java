@@ -28,11 +28,20 @@ import java.util.concurrent.TimeUnit;
  */
 public class Branch {
 
-	// Maximum amount of money for a single transfer
-	private static final int MAX_TRANSFER = 100;
+	/**
+	 * Initial balance for branch
+	 */
+	public static final long INITIAL_BALANCE = 10000;
 
-	// Transmission rate for generation of random money transfers (in ms)
-	private static final int TRANSFER_RATE = 500;
+	/**
+	 * Maximum amount of money for a single transfer
+	 */
+	public static final int MAX_TRANSFER = 100;
+
+	/**
+	 * Transmission rate for generation of random money transfers (in ms)
+	 */
+	public static final int TRANSFER_RATE = 200;
 
 	private final ScheduledExecutorService BRANCH_THREADS = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
@@ -56,7 +65,7 @@ public class Branch {
 	private int nextBranch = 0;
 
 	// Money available (not reserved) that can be used for transfers
-	private long availableAmounts;
+	private long availableAmounts = INITIAL_BALANCE;
 
 	// Money reserved for pending outgoing transfers
 	private long reservedAmounts = 0;
@@ -69,17 +78,16 @@ public class Branch {
 	 * @param initialBalance
 	 * @return A future is completed once the branch is started
 	 */
-	public static CompletableFuture<Branch> start(int localId, Map<Integer, InetSocketAddress> branches, long initialBalance) {
+	public static CompletableFuture<Branch> start(int localId, Map<Integer, InetSocketAddress> branches) {
 
-		Branch b = new Branch(localId, branches, initialBalance);
+		Branch b = new Branch(localId, branches);
 
 		return b.overlay.start(localId, branches).thenApply(b::startActivity);
 	}
 
-	private Branch(int localId, Map<Integer, InetSocketAddress> branches, long initialBalance) {
+	private Branch(int localId, Map<Integer, InetSocketAddress> branches) {
 		this.localId = localId;
 		this.branches = branches;
-		this.availableAmounts = initialBalance;
 
 		// Initialize random branches selection
 		randBranches = new ArrayList<Integer>(branches.keySet());

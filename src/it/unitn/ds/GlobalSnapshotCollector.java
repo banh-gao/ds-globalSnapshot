@@ -1,6 +1,6 @@
 package it.unitn.ds;
 
-import java.io.FileNotFoundException;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
 import java.util.HashMap;
@@ -18,6 +18,7 @@ public class GlobalSnapshotCollector {
 
 	private static CompletableFuture<Long> snapshotFut;
 
+	private static final String LOG_DIR = "logs";
 	private static final Map<Integer, PrintWriter> logFiles = new HashMap<Integer, PrintWriter>();
 
 	public static void initSnapshot(int totalNodes) {
@@ -42,16 +43,20 @@ public class GlobalSnapshotCollector {
 
 	private static void logLocal(long snapshotId, int branchId, long balance, long incoming) {
 		PrintWriter o = logFiles.computeIfAbsent(branchId, (id) -> {
+			File f = new File(LOG_DIR + File.separator + id + ".log");
 			try {
-				return new PrintWriter(new FileOutputStream(id + ".log"), true);
-			} catch (FileNotFoundException e) {
+				f.getParentFile().mkdirs();
+				return new PrintWriter(new FileOutputStream(f, true));
+			} catch (Exception e) {
 				e.printStackTrace();
 				return null;
 			}
 		});
 
-		if (o != null)
+		if (o != null) {
 			o.println(String.format("%d %d %d", snapshotId, balance, incoming));
+			o.flush();
+		}
 	}
 
 	public static CompletableFuture<Long> getGlobalBalance() {
