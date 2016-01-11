@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
 /**
- * UDP based networking between overlay branches
+ * UDP based overlay network between branches
  */
 public class UDPNetOverlay implements NetOverlay {
 

@@ -17,8 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Manage link layer reliability
- *
+ * Manage link layer reliability for parallel message reception and but only for
+ * serial message transmission
  */
 @Sharable
 public class LinkHandler extends ChannelDuplexHandler {

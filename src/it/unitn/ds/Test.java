@@ -1,7 +1,5 @@
 package it.unitn.ds;
 
-import it.unitn.ds.branch.Branch;
-import it.unitn.ds.branch.GlobalSnapshotCollector;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
@@ -9,9 +7,9 @@ import java.util.concurrent.CompletableFuture;
 
 public class Test {
 
-	static int N_BRANCHES = 100;
+	static int N_BRANCHES = 20;
 
-	static long balance = 10000;
+	static long initialBalance = 10000;
 
 	private static final Map<Integer, InetSocketAddress> branches = new HashMap<Integer, InetSocketAddress>(N_BRANCHES);
 
@@ -27,7 +25,7 @@ public class Test {
 
 		branches.keySet().forEach(branchId -> {
 			// Start all branches in parallel
-			b[branchId] = Branch.start(branchId, branches, balance);
+			b[branchId] = Branch.start(branchId, branches, initialBalance);
 		});
 
 		// Wait until all branches are started
@@ -41,13 +39,13 @@ public class Test {
 			// Always start snapshot from branch 0 (It can start everywhere but
 			// concurrent snapshots are not supported by branches)
 			b[0].get().startSnapshot(snapshotId);
+
+			// Wait until the snapshot terminates globally
+			long globalBalance = GlobalSnapshotCollector.getGlobalBalance().get();
+
+			System.out.println("Snapshot " + snapshotId + " reports a global balance " + globalBalance + ", expected balance was " + N_BRANCHES * initialBalance);
+
 			snapshotId = (snapshotId + 1) % Integer.MAX_VALUE;
-
-			// Busy wait until the snapshot terminates globally
-			while (GlobalSnapshotCollector.isSnapshotActive())
-				Thread.sleep(1000);
-
-			System.out.println("Snapshot balance is " + GlobalSnapshotCollector.getTotalBalance() + ", expected balance was " + N_BRANCHES * balance);
 		}
 	}
 }
