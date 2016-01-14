@@ -135,7 +135,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
 		if (cause.getClass() == PortUnreachableException.class) {
-			System.err.println("Destination port unreachable");
+			System.out.println("Delivery of message #" + pendingAck.seqn + " to branch " + pendingAck.senderId + " failed: (" + branches.get(pendingAck.senderId) + ")" + " unreachable!");
 		}
 	}
 }

@@ -31,7 +31,7 @@ public class Branch {
 	/**
 	 * Initial balance for branch
 	 */
-	public static final long INITIAL_BALANCE = 10000;
+	public static final long INITIAL_BALANCE = 1000000;
 
 	/**
 	 * Maximum amount of money for a single transfer
@@ -165,15 +165,13 @@ public class Branch {
 		return randBranches.get(this.nextBranch++);
 	}
 
-	public boolean startSnapshot(int snapshotId) {
-		if (snapshot.isActive()) {
-			System.out.println("Skipped global snapshot " + snapshotId + " from branch " + localId + " (snapshot " + snapshot.getActiveId() + " still in progress)");
-			return false;
-		}
+	public CompletableFuture<Long> startSnapshot(int snapshotId) {
+		CompletableFuture<Long> snapFut = new CompletableFuture<Long>();
 
 		System.out.println("Starting global snapshot " + snapshotId + " from branch " + localId);
+
 		BRANCH_THREADS.execute(() -> {
-			snapshot.startSnapshot(snapshotId, availableAmounts);
+			snapshot.startSnapshot(snapshotId, availableAmounts).thenAccept((v) -> snapFut.complete(v));
 
 			// Send tokens to all other branches, no transfer occurs between
 			// saving the availableAmounts and queuing tokens for broadcast
@@ -183,7 +181,7 @@ public class Branch {
 				e.printStackTrace();
 			}
 		});
-		return true;
+		return snapFut;
 	}
 
 	private void broadcastTokens(long snapshotId) throws InterruptedException, ExecutionException {
@@ -222,6 +220,7 @@ public class Branch {
 
 		private final Set<Integer> receivedTokens = new HashSet<Integer>();
 
+		private CompletableFuture<Long> snapFut;
 		private boolean isSnapshotMode = false;
 		private long snapshotId;
 		private long branchBalance;
@@ -273,7 +272,13 @@ public class Branch {
 			}
 		}
 
-		public void startSnapshot(long snapshotId, long currentBalance) {
+		public CompletableFuture<Long> startSnapshot(long snapshotId, long currentBalance) {
+			snapFut = new CompletableFuture<Long>();
+			if (snapshot.isActive()) {
+				snapFut.completeExceptionally(new IllegalStateException("Skipped global snapshot " + snapshotId + " from branch " + localId + " (snapshot " + snapshot.getActiveId() + " still in progress)"));
+				return snapFut;
+			}
+
 			isSnapshotMode = true;
 			this.snapshotId = snapshotId;
 			incomingTransfers = 0;
@@ -281,12 +286,14 @@ public class Branch {
 			// Save local snapshot status
 			branchBalance = currentBalance;
 			receivedTokens.add(localId);
+			return snapFut;
 		}
 
 		private void stopSnapshot() {
 			isSnapshotMode = false;
 			GlobalSnapshotCollector.reportLocalSnapshot(snapshotId, localId, branchBalance, incomingTransfers);
 
+			snapFut.complete(branchBalance + incomingTransfers);
 			receivedTokens.clear();
 		}
 
