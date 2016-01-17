@@ -131,6 +131,11 @@ public class UDPNetOverlay implements NetOverlay {
 		f.complete(m);
 	}
 
+	/**
+	 * Notifies waiting dequeuers or enqueue message in incoming queue
+	 * 
+	 * @param newMessage
+	 */
 	void messageReceived(Message newMessage) {
 		CompletableFuture<Message> f = cb.poll();
 		if (f != null)

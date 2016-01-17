@@ -18,7 +18,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Branch implementation that performs the following actions:
@@ -38,12 +37,7 @@ public class Branch {
 	 */
 	public static final int MAX_TRANSFER = 100;
 
-	/**
-	 * Transmission rate for generation of random money transfers (in ms)
-	 */
-	public static final int TRANSFER_RATE = 200;
-
-	private final ScheduledExecutorService BRANCH_THREADS = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+	private final ScheduledExecutorService BRANCH_THREAD = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
 		@Override
 		public Thread newThread(Runnable r) {
@@ -97,10 +91,10 @@ public class Branch {
 
 	private Branch startActivity(Void v) {
 		// Triggers message processing once the first message arrives
-		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREADS);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREAD);
 
-		// Schedule random sending of money transfers with a fixed rate
-		BRANCH_THREADS.scheduleWithFixedDelay(this::sendRandomTransfer, 0, TRANSFER_RATE, TimeUnit.MILLISECONDS);
+		// Start random money transfers transmission
+		BRANCH_THREAD.execute(this::sendRandomTransfer);
 		return this;
 	}
 
@@ -112,7 +106,7 @@ public class Branch {
 			processToken((Token) m);
 
 		// Reschedule for receiving the next message
-		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREADS);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREAD);
 	}
 
 	private void processTransfer(Transfer m) {
@@ -149,11 +143,12 @@ public class Branch {
 		availableAmounts -= amount;
 		reservedAmounts += amount;
 
-		// Once the transfer is completed the reserved amounts is reduced (by
-		// the same thread executor)
+		// Once the transfer is completed the branch thread:
+		// 1. reduces the reserved amounts
+		// 2. start a new random transfer
 		overlay.sendMessage(getRandomBranch(), new Transfer(amount)).thenAcceptAsync(t -> {
 			reservedAmounts -= t.getAmount();
-		}, BRANCH_THREADS);
+		}, BRANCH_THREAD).thenRunAsync(this::sendRandomTransfer, BRANCH_THREAD);
 	}
 
 	// Randomly choose a destination branch
@@ -170,7 +165,7 @@ public class Branch {
 
 		System.out.println("Starting global snapshot " + snapshotId + " from branch " + localId);
 
-		BRANCH_THREADS.execute(() -> {
+		BRANCH_THREAD.execute(() -> {
 			snapshot.startSnapshot(snapshotId, availableAmounts).thenAccept((v) -> snapFut.complete(v));
 
 			// Send tokens to all other branches, no transfer occurs between
@@ -210,7 +205,7 @@ public class Branch {
 	}
 
 	public void stop() {
-		BRANCH_THREADS.shutdown();
+		BRANCH_THREAD.shutdown();
 	}
 
 	/**

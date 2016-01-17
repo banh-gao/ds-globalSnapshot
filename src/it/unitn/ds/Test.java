@@ -7,7 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 class Test {
 
-	static int N_BRANCHES = 20;
+	static int N_BRANCHES = 10;
 
 	private static final Map<Integer, InetSocketAddress> branches = new HashMap<Integer, InetSocketAddress>(N_BRANCHES);
 
