@@ -90,6 +90,10 @@ public class Branch {
 	}
 
 	private Branch startActivity(Void v) {
+		// If only one branch, messaging not active
+		if (branches.size() == 1)
+			return this;
+
 		// Triggers message processing once the first message arrives
 		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREAD);
 
@@ -133,6 +137,7 @@ public class Branch {
 
 	// Transfer random money to random branch
 	private void sendRandomTransfer() {
+
 		if (availableAmounts == 0)
 			return;
 
@@ -281,6 +286,11 @@ public class Branch {
 			// Save local snapshot status
 			branchBalance = currentBalance;
 			receivedTokens.add(localId);
+
+			// Only one branch, local snapshot terminates immediately
+			if (branches.size() == 1)
+				stopSnapshot();
+
 			return snapFut;
 		}
 
