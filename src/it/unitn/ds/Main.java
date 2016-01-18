@@ -26,6 +26,11 @@ public class Main {
 
 		parseBranches(args[1]);
 
+		if (branchId >= branches.size()) {
+			System.out.println("Invalid branch ID");
+			System.exit(1);
+		}
+
 		Branch branch = Branch.start(branchId, branches).get();
 		System.out.println("Started branch " + branchId + " at " + branches.get(branchId) + " with an initial balance of " + Branch.INITIAL_BALANCE);
 
