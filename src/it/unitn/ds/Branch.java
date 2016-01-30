@@ -37,11 +37,11 @@ public class Branch {
 	 */
 	public static final int MAX_TRANSFER = 100;
 
-	private final ScheduledExecutorService BRANCH_THREAD = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+	private final ScheduledExecutorService EVENT_LOOP = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
 		@Override
 		public Thread newThread(Runnable r) {
-			Thread t = new Thread(r, "Branch Thread");
+			Thread t = new Thread(r, "Branch Looper");
 			t.setDaemon(true);
 			return t;
 		}
@@ -95,10 +95,10 @@ public class Branch {
 			return this;
 
 		// Triggers message processing once the first message arrives
-		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREAD);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), EVENT_LOOP);
 
 		// Start random money transfers transmission
-		BRANCH_THREAD.execute(this::sendRandomTransfer);
+		EVENT_LOOP.execute(this::sendRandomTransfer);
 		return this;
 	}
 
@@ -110,7 +110,7 @@ public class Branch {
 			processToken((Token) m);
 
 		// Reschedule for receiving the next message
-		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), BRANCH_THREAD);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), EVENT_LOOP);
 	}
 
 	private void processTransfer(Transfer m) {
@@ -153,7 +153,7 @@ public class Branch {
 		// 2. start a new random transfer
 		overlay.sendMessage(getRandomBranch(), new Transfer(amount)).thenAcceptAsync(t -> {
 			reservedAmounts -= t.getAmount();
-		}, BRANCH_THREAD).thenRunAsync(this::sendRandomTransfer, BRANCH_THREAD);
+		}, EVENT_LOOP).thenRunAsync(this::sendRandomTransfer, EVENT_LOOP);
 	}
 
 	// Randomly choose a destination branch
@@ -170,7 +170,7 @@ public class Branch {
 
 		System.out.println("Starting global snapshot " + snapshotId + " from branch " + localId);
 
-		BRANCH_THREAD.execute(() -> {
+		EVENT_LOOP.execute(() -> {
 			snapshot.startSnapshot(snapshotId, availableAmounts).thenAccept((v) -> snapFut.complete(v));
 
 			// Send tokens to all other branches, no transfer occurs between
@@ -210,7 +210,7 @@ public class Branch {
 	}
 
 	public void stop() {
-		BRANCH_THREAD.shutdown();
+		EVENT_LOOP.shutdown();
 	}
 
 	/**
