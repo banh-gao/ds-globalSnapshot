@@ -10,6 +10,8 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 import it.unitn.ds.net.NetOverlay.Message;
+import it.unitn.ds.net.NetOverlay.Transfer;
+
 import java.net.InetSocketAddress;
 import java.net.PortUnreachableException;
 import java.util.Map;
@@ -30,10 +32,9 @@ public class LinkHandler extends ChannelDuplexHandler {
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
 
-	// Pending ack is assumed to be set for a serial transmission on the link
-	// (no parallel reliable data transmission)
-	private MessageAck pendingAck;
-	private int lastDelivered;
+	// Pending msg is assumed to be set for a serial transmission on the link
+	// (not working with parallel data transmission)
+	private Message pendingMsg;
 
 	public LinkHandler(int localBranch, Map<Integer, InetSocketAddress> branches) {
 		this.localBranch = localBranch;
@@ -44,15 +45,17 @@ public class LinkHandler extends ChannelDuplexHandler {
 	@Override
 	public void channelActive(ChannelHandlerContext ctx) throws Exception {
 		// Send ACK messages using the channel event loop
-		ackBoot.group(ctx.channel().eventLoop());
+		if (ackBoot.group() == null)
+			ackBoot.group(ctx.channel().eventLoop());
 	}
 
 	@Override
-	public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+	public void write(final ChannelHandlerContext ctx, Object msg,
+			ChannelPromise promise) throws Exception {
 		if (((Message) msg).seqn == 0)
 			((Message) msg).seqn = nextSeq();
 
-		pendingAck = new MessageAck(((Message) msg).seqn, ((Message) msg).destId);
+		pendingMsg = (Message) msg;
 		super.write(ctx, msg, promise);
 	}
 
@@ -66,7 +69,8 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	@Override
-	public void channelRead(ChannelHandlerContext ctx, Object in) throws Exception {
+	public void channelRead(ChannelHandlerContext ctx, Object in)
+			throws Exception {
 		if (in.getClass() == MessageAck.class) {
 			handleAck((MessageAck) in);
 			return;
@@ -90,52 +94,43 @@ public class LinkHandler extends ChannelDuplexHandler {
 		ackBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
 
 			@Override
-			public void operationComplete(ChannelFuture future) throws Exception {
-				future.channel().writeAndFlush(new MessageAck(msg.seqn, localBranch)).addListener(new ChannelFutureListener() {
+			public void operationComplete(ChannelFuture future)
+					throws Exception {
+				future.channel()
+						.writeAndFlush(new MessageAck(msg.seqn, localBranch))
+						.addListener(new ChannelFutureListener() {
 
-					@Override
-					public void operationComplete(ChannelFuture future) throws Exception {
-						future.channel().close();
-					}
-				});
+							@Override
+							public void operationComplete(ChannelFuture future)
+									throws Exception {
+								future.channel().close();
+							}
+						});
 			}
 		});
 	}
 
 	private void handleAck(MessageAck ack) {
-		if (ack.equals(pendingAck)) {
-			synchronized (pendingAck) {
-				lastDelivered = pendingAck.seqn;
-				// Notifies ack waiters that ack arrives
-				pendingAck.notifyAll();
-			}
-		}
-	}
-
-	/**
-	 * Wait until the last sent message gets acknowledged or the request times
-	 * out.
-	 * 
-	 * @param timeout
-	 * @return True if ack was received, false if the request times out before
-	 *         receiving the ack
-	 * @throws InterruptedException
-	 */
-	public boolean waitForAck(int timeout) throws InterruptedException {
-		if (pendingAck == null)
-			return false;
-
-		// Wait until ack is received or request times out
-		synchronized (pendingAck) {
-			pendingAck.wait(timeout);
-			return (lastDelivered >= pendingAck.seqn);
+		if (pendingMsg.isMatchingAck(ack)) {
+			pendingMsg.deliveryFut.complete(pendingMsg);
+		} else {
+			System.err.println("Unexpected ACK " + ack + " dropped");
 		}
 	}
 
 	@Override
-	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+			throws Exception {
 		if (cause.getClass() == PortUnreachableException.class) {
-			System.out.println("Delivery of message #" + pendingAck.seqn + " to branch " + pendingAck.senderId + " failed: (" + branches.get(pendingAck.senderId) + ")" + " unreachable!");
+			System.out
+					.println("Delivery of message #" + pendingMsg.seqn
+							+ " to branch " + pendingMsg.senderId
+							+ " failed: (" + branches.get(pendingMsg.senderId)
+							+ ")" + " unreachable!");
+			//FIXME: Retried once timeout occurs
+			pendingMsg.deliveryFut.completeExceptionally(cause);
+		} else {
+			pendingMsg.deliveryFut.completeExceptionally(cause);
 		}
 	}
 }

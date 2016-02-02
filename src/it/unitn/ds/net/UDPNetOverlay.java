@@ -3,6 +3,7 @@ package it.unitn.ds.net;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -10,14 +11,15 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+
 import java.net.InetSocketAddress;
+import java.net.PortUnreachableException;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * UDP based overlay network between branches
@@ -30,33 +32,16 @@ public class UDPNetOverlay implements NetOverlay {
 	// Acknowledgement timeout in ms
 	private static final int ACK_TIMEOUT = 1000;
 
-	private final EventLoopGroup workersGroup = new NioEventLoopGroup(POOL_SIZE, new ThreadFactory() {
+	private final EventLoopGroup workersGroup = new NioEventLoopGroup(
+			POOL_SIZE, new ThreadFactory() {
 
-		@Override
-		public Thread newThread(Runnable r) {
-			Thread t = new Thread(r, "Net Stack Worker");
-			t.setDaemon(true);
-			return t;
-		}
-	});
-
-	// Threads used to send messages to remote branches and wait for
-	// acknowledgment
-	// The sender is a single thread that is blocks until an acknowledgment is
-	// received. At that point it notifies the original sender thread and
-	// finally starts processing the next send request. This guarantees that
-	// messages cannot be send in parallel (thus reducing overall performance
-	// but with
-	// simplified reliability management).
-	private final ExecutorService senderThreads = Executors.newSingleThreadExecutor(new ThreadFactory() {
-
-		@Override
-		public Thread newThread(Runnable r) {
-			Thread t = new Thread(r, "Net Sender Worker");
-			t.setDaemon(true);
-			return t;
-		}
-	});
+				@Override
+				public Thread newThread(Runnable r) {
+					Thread t = new Thread(r, "Net Stack Worker");
+					t.setDaemon(true);
+					return t;
+				}
+			});
 
 	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
 	private final Queue<CompletableFuture<Message>> cb = new ConcurrentLinkedDeque<CompletableFuture<Message>>();
@@ -66,18 +51,23 @@ public class UDPNetOverlay implements NetOverlay {
 	int localBranch;
 	Map<Integer, InetSocketAddress> branches;
 
+	private AtomicReference<CompletableFuture<Message>> lastSendFut = new AtomicReference<CompletableFuture<Message>>();
+
 	public UDPNetOverlay() {
 		chBoot = new Bootstrap();
 	}
 
 	@Override
-	public CompletableFuture<Void> start(int localBranch, Map<Integer, InetSocketAddress> branches) {
+	public CompletableFuture<Void> start(int localBranch,
+			Map<Integer, InetSocketAddress> branches) {
 		this.localBranch = localBranch;
 		this.branches = branches;
 
 		CompletableFuture<Void> startFut = new CompletableFuture<Void>();
 
-		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
+		chBoot.group(workersGroup).channel(NioDatagramChannel.class)
+				.option(ChannelOption.SO_BROADCAST, true)
+				.handler(new StackInitializer());
 
 		InetSocketAddress localAddr = branches.get(localBranch);
 		if (localAddr == null)
@@ -94,41 +84,48 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	@Override
-	public CompletableFuture<Message> sendMessage(int remoteBranch, Message m) {
-		m.senderId = localBranch;
-		m.destId = remoteBranch;
-
-		CompletableFuture<Message> f = new CompletableFuture<Message>();
-
-		senderThreads.execute(() -> {
-			InetSocketAddress remoteAddr = branches.get(remoteBranch);
-			if (remoteAddr == null)
-				throw new IllegalArgumentException("Invalid branch ID");
-
-			try {
-				sendUDPMessage(remoteAddr, m, f);
-			} catch (InterruptedException e) {
-				// Can never happen
-				e.printStackTrace();
-			}
-		});
-		return f;
-	}
-
-	private void sendUDPMessage(InetSocketAddress remoteAddr, Message m, CompletableFuture<Message> f) throws InterruptedException {
-		Channel ch = chBoot.connect(remoteAddr).sync().channel();
-		// Write and wait until message is sent
-		ch.writeAndFlush(m).sync();
-
-		LinkHandler linkHandler = ch.pipeline().get(LinkHandler.class);
-
-		// Keeps sending until ack is received
-		while (!linkHandler.waitForAck(ACK_TIMEOUT)) {
-			ch.writeAndFlush(m).sync();
+	public CompletableFuture<Message> sendMessage(
+			int remoteBranch, Message msg) {
+		
+		InetSocketAddress remoteAddr = branches.get(remoteBranch);
+		if (remoteAddr == null)
+			throw new IllegalArgumentException("Invalid branch ID");
+		
+		msg.destId = remoteBranch;
+		msg.senderId = localBranch;
+		msg.deliveryFut = new CompletableFuture<Message>();
+		
+		// To achieve sequential transmission build a virtual queue by
+		// concatenating delivery futures: send the next message only when the
+		// previous is delivered
+		
+		//Atomically change the last delivery future (the tail of the virtual queue)
+		CompletableFuture<Message> lastFut = lastSendFut.getAndSet(msg.deliveryFut);
+		if (lastFut == null)
+			sendUDPMessage(remoteAddr, msg);
+		else {
+			lastFut.thenRun(() -> sendUDPMessage(remoteAddr, msg));
+			//Send current message even if the previous completes exceptionally
+			lastFut.exceptionally((ex) -> {
+				sendUDPMessage(remoteAddr, msg);
+				return null;
+			});
 		}
 
-		ch.close();
-		f.complete(m);
+		return msg.deliveryFut;
+	}
+
+	private void sendUDPMessage(InetSocketAddress remoteAddr, Message m) {
+		chBoot.connect(remoteAddr).addListener(new ChannelFutureListener() {
+
+			@Override
+			public void operationComplete(ChannelFuture future)
+					throws Exception {
+				future.channel().writeAndFlush(m);
+				// Once the message is delivered close the channel
+				m.deliveryFut.thenRun(() -> future.channel().close());
+			}
+		});
 	}
 
 	/**

@@ -1,5 +1,7 @@
 package it.unitn.ds.net;
 
+import it.unitn.ds.net.LinkAckEncoder.MessageAck;
+
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -44,6 +46,7 @@ public interface NetOverlay {
 		int seqn;
 		int senderId;
 		int destId;
+		CompletableFuture<Message> deliveryFut;
 
 		public int getSenderId() {
 			return senderId;
@@ -52,6 +55,10 @@ public interface NetOverlay {
 		@Override
 		public String toString() {
 			return "Message [seqn=" + seqn + ", senderId=" + senderId + "]";
+		}
+
+		public boolean isMatchingAck(MessageAck ack) {
+			return ack.senderId == destId && ack.seqn == seqn;
 		}
 	}
 
