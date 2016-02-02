@@ -13,7 +13,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 
 import java.net.InetSocketAddress;
-import java.net.PortUnreachableException;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -28,9 +27,6 @@ public class UDPNetOverlay implements NetOverlay {
 
 	// Size of thread pool to handle in/out messages
 	private static final int POOL_SIZE = 1;
-
-	// Acknowledgement timeout in ms
-	private static final int ACK_TIMEOUT = 1000;
 
 	private final EventLoopGroup workersGroup = new NioEventLoopGroup(
 			POOL_SIZE, new ThreadFactory() {

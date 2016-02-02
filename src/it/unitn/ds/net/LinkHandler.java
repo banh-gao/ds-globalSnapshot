@@ -10,12 +10,15 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 import it.unitn.ds.net.NetOverlay.Message;
-import it.unitn.ds.net.NetOverlay.Transfer;
 
 import java.net.InetSocketAddress;
 import java.net.PortUnreachableException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -25,9 +28,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Sharable
 public class LinkHandler extends ChannelDuplexHandler {
 
+	// Acknowledgement timeout in ms
+	private static final int ACK_TIMEOUT = 1000;
+
 	private final Bootstrap ackBoot = new Bootstrap();
 	private final int localBranch;
 	private final Map<Integer, InetSocketAddress> branches;
+
+	private final ScheduledExecutorService retransmissionTimer = Executors
+			.newScheduledThreadPool(1);
 
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
@@ -35,6 +44,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 	// Pending msg is assumed to be set for a serial transmission on the link
 	// (not working with parallel data transmission)
 	private Message pendingMsg;
+	private ScheduledFuture<?> retransmissionTask;
 
 	public LinkHandler(int localBranch, Map<Integer, InetSocketAddress> branches) {
 		this.localBranch = localBranch;
@@ -56,7 +66,18 @@ public class LinkHandler extends ChannelDuplexHandler {
 			((Message) msg).seqn = nextSeq();
 
 		pendingMsg = (Message) msg;
+
 		super.write(ctx, msg, promise);
+		
+		// Start retransmission task
+		retransmissionTask = retransmissionTimer.scheduleAtFixedRate(() -> {
+			try {
+				ctx.writeAndFlush(msg);
+			} catch (Exception e) {
+				// Exceptionally complete for all unhandled exceptions
+				pendingMsg.deliveryFut.completeExceptionally(e);
+			}
+		}, ACK_TIMEOUT, ACK_TIMEOUT, TimeUnit.MILLISECONDS);
 	}
 
 	private int nextSeq() {
@@ -112,6 +133,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 
 	private void handleAck(MessageAck ack) {
 		if (pendingMsg.isMatchingAck(ack)) {
+			retransmissionTask.cancel(false);
 			pendingMsg.deliveryFut.complete(pendingMsg);
 		} else {
 			System.err.println("Unexpected ACK " + ack + " dropped");
@@ -127,8 +149,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 							+ " to branch " + pendingMsg.senderId
 							+ " failed: (" + branches.get(pendingMsg.senderId)
 							+ ")" + " unreachable!");
-			//FIXME: Retried once timeout occurs
-			pendingMsg.deliveryFut.completeExceptionally(cause);
+			// FIXME: Retried once timeout occurs
 		} else {
 			pendingMsg.deliveryFut.completeExceptionally(cause);
 		}
