@@ -10,7 +10,6 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import it.unitn.ds.net.LinkAckEncoder.MessageAck;
 import it.unitn.ds.net.NetOverlay.Message;
-
 import java.net.InetSocketAddress;
 import java.net.PortUnreachableException;
 import java.util.Map;
@@ -24,6 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Manage link layer reliability for parallel message reception and but only for
  * serial message transmission
+ * It's marked as sharable since the same instance is used in all UDP stacks
+ * used by the node
  */
 @Sharable
 public class LinkHandler extends ChannelDuplexHandler {
@@ -35,8 +36,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 	private final int localBranch;
 	private final Map<Integer, InetSocketAddress> branches;
 
-	private final ScheduledExecutorService retransmissionTimer = Executors
-			.newScheduledThreadPool(1);
+	private final ScheduledExecutorService retransmissionTimer = Executors.newScheduledThreadPool(1);
 
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
@@ -60,15 +60,14 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	@Override
-	public void write(final ChannelHandlerContext ctx, Object msg,
-			ChannelPromise promise) throws Exception {
+	public void write(final ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
 		if (((Message) msg).seqn == 0)
 			((Message) msg).seqn = nextSeq();
 
 		pendingMsg = (Message) msg;
 
 		super.write(ctx, msg, promise);
-		
+
 		// Start retransmission task
 		retransmissionTask = retransmissionTimer.scheduleAtFixedRate(() -> {
 			try {
@@ -90,8 +89,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	@Override
-	public void channelRead(ChannelHandlerContext ctx, Object in)
-			throws Exception {
+	public void channelRead(ChannelHandlerContext ctx, Object in) throws Exception {
 		if (in.getClass() == MessageAck.class) {
 			handleAck((MessageAck) in);
 			return;
@@ -115,18 +113,14 @@ public class LinkHandler extends ChannelDuplexHandler {
 		ackBoot.connect(branchAddr).addListener(new ChannelFutureListener() {
 
 			@Override
-			public void operationComplete(ChannelFuture future)
-					throws Exception {
-				future.channel()
-						.writeAndFlush(new MessageAck(msg.seqn, localBranch))
-						.addListener(new ChannelFutureListener() {
+			public void operationComplete(ChannelFuture future) throws Exception {
+				future.channel().writeAndFlush(new MessageAck(msg.seqn, localBranch)).addListener(new ChannelFutureListener() {
 
-							@Override
-							public void operationComplete(ChannelFuture future)
-									throws Exception {
-								future.channel().close();
-							}
-						});
+					@Override
+					public void operationComplete(ChannelFuture future) throws Exception {
+						future.channel().close();
+					}
+				});
 			}
 		});
 	}
@@ -141,15 +135,10 @@ public class LinkHandler extends ChannelDuplexHandler {
 	}
 
 	@Override
-	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
-			throws Exception {
+	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
 		if (cause.getClass() == PortUnreachableException.class) {
-			System.out
-					.println("Delivery of message #" + pendingMsg.seqn
-							+ " to branch " + pendingMsg.senderId
-							+ " failed: (" + branches.get(pendingMsg.senderId)
-							+ ")" + " unreachable!");
-			// FIXME: Retried once timeout occurs
+			System.out.println("Delivery of message #" + pendingMsg.seqn + " to branch " + pendingMsg.senderId + " failed: (" + branches.get(pendingMsg.senderId) + ")" + " unreachable!");
+			// Retried anyway once timeout occurs
 		} else {
 			pendingMsg.deliveryFut.completeExceptionally(cause);
 		}

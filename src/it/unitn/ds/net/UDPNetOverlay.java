@@ -11,7 +11,6 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
-
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Queue;
@@ -28,16 +27,15 @@ public class UDPNetOverlay implements NetOverlay {
 	// Size of thread pool to handle in/out messages
 	private static final int POOL_SIZE = 1;
 
-	private final EventLoopGroup workersGroup = new NioEventLoopGroup(
-			POOL_SIZE, new ThreadFactory() {
+	private final EventLoopGroup workersGroup = new NioEventLoopGroup(POOL_SIZE, new ThreadFactory() {
 
-				@Override
-				public Thread newThread(Runnable r) {
-					Thread t = new Thread(r, "Net Stack Worker");
-					t.setDaemon(true);
-					return t;
-				}
-			});
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "Net Stack Worker");
+			t.setDaemon(true);
+			return t;
+		}
+	});
 
 	private final Queue<Message> incomingQueue = new ConcurrentLinkedDeque<Message>();
 	private final Queue<CompletableFuture<Message>> cb = new ConcurrentLinkedDeque<CompletableFuture<Message>>();
@@ -54,16 +52,13 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	@Override
-	public CompletableFuture<Void> start(int localBranch,
-			Map<Integer, InetSocketAddress> branches) {
+	public CompletableFuture<Void> start(int localBranch, Map<Integer, InetSocketAddress> branches) {
 		this.localBranch = localBranch;
 		this.branches = branches;
 
 		CompletableFuture<Void> startFut = new CompletableFuture<Void>();
 
-		chBoot.group(workersGroup).channel(NioDatagramChannel.class)
-				.option(ChannelOption.SO_BROADCAST, true)
-				.handler(new StackInitializer());
+		chBoot.group(workersGroup).channel(NioDatagramChannel.class).option(ChannelOption.SO_BROADCAST, true).handler(new StackInitializer());
 
 		InetSocketAddress localAddr = branches.get(localBranch);
 		if (localAddr == null)
@@ -80,28 +75,28 @@ public class UDPNetOverlay implements NetOverlay {
 	}
 
 	@Override
-	public CompletableFuture<Message> sendMessage(
-			int remoteBranch, Message msg) {
-		
+	public CompletableFuture<Message> sendMessage(int remoteBranch, Message msg) {
+
 		InetSocketAddress remoteAddr = branches.get(remoteBranch);
 		if (remoteAddr == null)
 			throw new IllegalArgumentException("Invalid branch ID");
-		
+
 		msg.destId = remoteBranch;
 		msg.senderId = localBranch;
 		msg.deliveryFut = new CompletableFuture<Message>();
-		
+
 		// To achieve sequential transmission build a virtual queue by
 		// concatenating delivery futures: send the next message only when the
 		// previous is delivered
-		
-		//Atomically change the last delivery future (the tail of the virtual queue)
+
+		// Atomically change the last delivery future (the tail of the virtual
+		// queue)
 		CompletableFuture<Message> lastFut = lastSendFut.getAndSet(msg.deliveryFut);
 		if (lastFut == null)
 			sendUDPMessage(remoteAddr, msg);
 		else {
 			lastFut.thenRun(() -> sendUDPMessage(remoteAddr, msg));
-			//Send current message even if the previous completes exceptionally
+			// Send current message even if the previous completes exceptionally
 			lastFut.exceptionally((ex) -> {
 				sendUDPMessage(remoteAddr, msg);
 				return null;
@@ -115,8 +110,7 @@ public class UDPNetOverlay implements NetOverlay {
 		chBoot.connect(remoteAddr).addListener(new ChannelFutureListener() {
 
 			@Override
-			public void operationComplete(ChannelFuture future)
-					throws Exception {
+			public void operationComplete(ChannelFuture future) throws Exception {
 				future.channel().writeAndFlush(m);
 				// Once the message is delivered close the channel
 				m.deliveryFut.thenRun(() -> future.channel().close());
@@ -149,6 +143,10 @@ public class UDPNetOverlay implements NetOverlay {
 		}
 	}
 
+	/**
+	 * All the network stacks used by the node are initialized using a single
+	 * shared initialized
+	 */
 	@Sharable
 	class StackInitializer extends ChannelInitializer<Channel> {
 

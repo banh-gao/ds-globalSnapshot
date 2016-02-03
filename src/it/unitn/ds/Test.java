@@ -7,7 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 class Test {
 
-	static int N_BRANCHES = 100;
+	static int N_BRANCHES = 20;
 
 	private static final Map<Integer, InetSocketAddress> branches = new HashMap<Integer, InetSocketAddress>(N_BRANCHES);
 
@@ -28,7 +28,7 @@ class Test {
 
 		// Wait until all branches are started
 		CompletableFuture.allOf(b).join();
-		
+
 		// Keeps running the global snapshot algorithm
 		int snapshotId = 0;
 		while (true) {
