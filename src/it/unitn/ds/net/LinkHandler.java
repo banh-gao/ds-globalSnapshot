@@ -65,6 +65,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 			((Message) msg).seqn = nextSeq();
 
 		pendingMsg = (Message) msg;
+		System.out.println(pendingMsg);
 
 		super.write(ctx, msg, promise);
 
@@ -137,7 +138,7 @@ public class LinkHandler extends ChannelDuplexHandler {
 	@Override
 	public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
 		if (cause.getClass() == PortUnreachableException.class) {
-			System.out.println("Delivery of message #" + pendingMsg.seqn + " to branch " + pendingMsg.senderId + " failed: (" + branches.get(pendingMsg.senderId) + ")" + " unreachable!");
+			System.out.println("Delivery of message #" + pendingMsg.seqn + " to branch " + pendingMsg.destId + " failed: (" + branches.get(pendingMsg.destId) + ")" + " unreachable!");
 			// Retried anyway once timeout occurs
 		} else {
 			pendingMsg.deliveryFut.completeExceptionally(cause);
