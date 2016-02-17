@@ -5,7 +5,6 @@ import it.unitn.ds.net.NetOverlay.Message;
 import it.unitn.ds.net.NetOverlay.Token;
 import it.unitn.ds.net.NetOverlay.Transfer;
 import it.unitn.ds.net.UDPNetOverlay;
-
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,16 +36,15 @@ public class Branch {
 	 */
 	public static final int MAX_TRANSFER = 100;
 
-	private final ScheduledExecutorService MAIN_LOOP = Executors
-			.newSingleThreadScheduledExecutor(new ThreadFactory() {
+	private final ScheduledExecutorService MAIN_LOOP = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
-				@Override
-				public Thread newThread(Runnable r) {
-					Thread t = new Thread(r, "Branch Looper");
-					t.setDaemon(true);
-					return t;
-				}
-			});
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "Branch Looper");
+			t.setDaemon(true);
+			return t;
+		}
+	});
 
 	private final int localId;
 	private final Map<Integer, InetSocketAddress> branches;
@@ -73,8 +71,7 @@ public class Branch {
 	 * @param initialBalance
 	 * @return A future is completed once the branch is started
 	 */
-	public static CompletableFuture<Branch> start(int localId,
-			Map<Integer, InetSocketAddress> branches) {
+	public static CompletableFuture<Branch> start(int localId, Map<Integer, InetSocketAddress> branches) {
 
 		Branch b = new Branch(localId, branches);
 
@@ -97,8 +94,7 @@ public class Branch {
 			return this;
 
 		// Triggers message processing once the first message arrives
-		overlay.receiveMessage().thenAcceptAsync(
-				inMsg -> processMessage(inMsg), MAIN_LOOP);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), MAIN_LOOP);
 
 		// Start random money transfers transmission
 		MAIN_LOOP.execute(this::sendRandomTransfer);
@@ -113,8 +109,7 @@ public class Branch {
 			processToken((Token) m);
 
 		// Reschedule for receiving the next message
-		overlay.receiveMessage().thenAcceptAsync(
-				inMsg -> processMessage(inMsg), MAIN_LOOP);
+		overlay.receiveMessage().thenAcceptAsync(inMsg -> processMessage(inMsg), MAIN_LOOP);
 	}
 
 	private void processTransfer(Transfer m) {
@@ -126,8 +121,7 @@ public class Branch {
 	}
 
 	private void processToken(Token m) {
-		boolean isNewSnapshot = snapshot.newTokenReceived(m.getSenderId(),
-				m.getSnapshotId(), availableAmounts);
+		boolean isNewSnapshot = snapshot.newTokenReceived(m.getSenderId(), m.getSnapshotId(), availableAmounts);
 
 		if (!isNewSnapshot)
 			return;
@@ -156,8 +150,7 @@ public class Branch {
 		// Once the transfer is completed the branch thread:
 		// 1. reduces the reserved amounts
 		// 2. start a new random transfer
-		CompletableFuture<Void> outcome = overlay.sendMessage(
-				getRandomBranch(), new Transfer(amount)).thenAcceptAsync(t -> {
+		CompletableFuture<Void> outcome = overlay.sendMessage(getRandomBranch(), new Transfer(amount)).thenAcceptAsync(t -> {
 			reservedAmounts -= t.getAmount();
 		}, MAIN_LOOP);
 
@@ -187,26 +180,23 @@ public class Branch {
 	public CompletableFuture<Long> startSnapshot(int snapshotId) {
 		CompletableFuture<Long> snapFut = new CompletableFuture<Long>();
 
-		System.out.println("Starting global snapshot " + snapshotId
-				+ " from branch " + localId);
+		System.out.println("Starting global snapshot " + snapshotId + " from branch " + localId);
 
 		MAIN_LOOP.execute(() -> {
-			snapshot.startSnapshot(snapshotId, availableAmounts).thenAccept(
-					(v) -> snapFut.complete(v));
+			snapshot.startSnapshot(snapshotId, availableAmounts).thenAccept((v) -> snapFut.complete(v));
 
 			// Send tokens to all other branches, no transfer occurs between
 			// saving the availableAmounts and queuing tokens for broadcast
-				try {
-					broadcastTokens(snapshotId);
-				} catch (InterruptedException | ExecutionException e) {
-					e.printStackTrace();
-				}
-			});
+			try {
+				broadcastTokens(snapshotId);
+			} catch (InterruptedException | ExecutionException e) {
+				e.printStackTrace();
+			}
+		});
 		return snapFut;
 	}
 
-	private void broadcastTokens(long snapshotId) throws InterruptedException,
-			ExecutionException {
+	private void broadcastTokens(long snapshotId) throws InterruptedException, ExecutionException {
 		Set<Integer> destBranches = new HashSet<Integer>(branches.keySet());
 
 		destBranches.remove(localId);
@@ -232,7 +222,8 @@ public class Branch {
 	}
 
 	public void stop() {
-		MAIN_LOOP.shutdown();
+		overlay.stop();
+		MAIN_LOOP.shutdownNow();
 	}
 
 	/**
@@ -256,8 +247,7 @@ public class Branch {
 		 * @return Returns true if the token has triggered a new snapshot in the
 		 *         local node
 		 */
-		public boolean newTokenReceived(int branch, long snapshotId,
-				long currentBalance) {
+		public boolean newTokenReceived(int branch, long snapshotId, long currentBalance) {
 			// Discard token not matching current snapshot id
 			if (isSnapshotMode && snapshotId != this.snapshotId) {
 				System.out.println("Token not matching active snapshot ID");
@@ -295,15 +285,10 @@ public class Branch {
 			}
 		}
 
-		public CompletableFuture<Long> startSnapshot(long snapshotId,
-				long currentBalance) {
+		public CompletableFuture<Long> startSnapshot(long snapshotId, long currentBalance) {
 			snapFut = new CompletableFuture<Long>();
 			if (snapshot.isActive()) {
-				snapFut.completeExceptionally(new IllegalStateException(
-						"Skipped global snapshot " + snapshotId
-								+ " from branch " + localId + " (snapshot "
-								+ snapshot.getActiveId()
-								+ " still in progress)"));
+				snapFut.completeExceptionally(new IllegalStateException("Skipped global snapshot " + snapshotId + " from branch " + localId + " (snapshot " + snapshot.getActiveId() + " still in progress)"));
 				return snapFut;
 			}
 
@@ -324,8 +309,7 @@ public class Branch {
 
 		private void stopSnapshot() {
 			isSnapshotMode = false;
-			GlobalSnapshotCollector.reportLocalSnapshot(snapshotId, localId,
-					branchBalance, incomingTransfers);
+			GlobalSnapshotCollector.reportLocalSnapshot(snapshotId, localId, branchBalance, incomingTransfers);
 
 			snapFut.complete(branchBalance + incomingTransfers);
 			receivedTokens.clear();

@@ -1,7 +1,6 @@
 package it.unitn.ds.net;
 
 import it.unitn.ds.net.LinkAckEncoder.MessageAck;
-
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -22,6 +21,11 @@ public interface NetOverlay {
 	 *            A map that associates branches with their network addresses
 	 */
 	CompletableFuture<Void> start(int localBranch, Map<Integer, InetSocketAddress> branches);
+
+	/**
+	 * Stops network event loop activities
+	 */
+	void stop();
 
 	/**
 	 * Send the given message to the specified remote branch.

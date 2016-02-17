@@ -52,7 +52,11 @@ public class Main {
 		}
 		s.close();
 
-		System.out.println("\nProgram terminated by user");
+		System.out.println("\nShutting down branch activities...");
+
+		branch.stop();
+
+		System.out.println("Program terminated by user");
 	}
 
 	private static void parseBranches(String file) throws IOException {

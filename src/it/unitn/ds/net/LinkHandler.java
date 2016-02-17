@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,7 +37,15 @@ public class LinkHandler extends ChannelDuplexHandler {
 	private final int localBranch;
 	private final Map<Integer, InetSocketAddress> branches;
 
-	private final ScheduledExecutorService retransmissionTimer = Executors.newScheduledThreadPool(1);
+	private final ScheduledExecutorService retransmissionTimer = Executors.newScheduledThreadPool(1, new ThreadFactory() {
+
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "Retransmission Timer");
+			t.setDaemon(true);
+			return t;
+		}
+	});
 
 	private AtomicInteger nextSeq = new AtomicInteger(1);
 	private Map<Integer, Integer> branchesSeqn = new ConcurrentHashMap<Integer, Integer>();
@@ -65,7 +74,6 @@ public class LinkHandler extends ChannelDuplexHandler {
 			((Message) msg).seqn = nextSeq();
 
 		pendingMsg = (Message) msg;
-		System.out.println(pendingMsg);
 
 		super.write(ctx, msg, promise);
 

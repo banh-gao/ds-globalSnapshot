@@ -74,6 +74,10 @@ public class UDPNetOverlay implements NetOverlay {
 		return startFut;
 	}
 
+	public void stop() {
+		workersGroup.shutdownGracefully();
+	}
+
 	@Override
 	public CompletableFuture<Message> sendMessage(int remoteBranch, Message msg) {
 
